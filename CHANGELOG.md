@@ -5,10 +5,6 @@
 - Implémentation de base du HDC (Hyperdimensional Computing).
 - Encodage de tokens par vecteurs aléatoires (10k bits).
 - Majority Bundling pour la mémorisation de séquences (N-grams).
-- Recherche exacte Hamming vectorisée avec NumPy.
-### Résultats
-- Accuracy@1 sur Train : 93%.
-- Latence : 40ms (scan linéaire).
 
 ## [V1.0.0] - V2 Industrialisation (01 Mai 2026)
 ### Ajouté
@@ -17,12 +13,12 @@
 - **Subwords** : Encodage par n-grammes de caractères pour la similarité morphologique.
 - **Incremental Weighted Sum** : Calcul du bundle en O(D) au lieu de O(N*D).
 - **Positional Primes** : Rotations basées sur des nombres premiers pour les contextes longs.
-### Améliorations
-- Latence réduite de **40ms à 14ms** (D=30k).
 
-## [V1.2.0] - Architecture Générative V3 (En cours)
+## [V1.3.0] - Persistance & Stabilité V3 (01 Mai 2026)
 ### Ajouté
-- **BTree Memory** : Structure arborescente pour la mémoire associative (O(log N)).
-- **Semantic Pivot** : Encodeur de phrases (Sentence Encoding) pour capturer le sens global.
-- **V3 Engine** : Architecture autorégressive fusionnant contexte sémantique (Long Term) et contexte local (Short Term).
-- **Conditionnement XOR** : Guidage de la génération par le vecteur de contexte global.
+- **Binary Persistence (Option B)** : Format `.hdb` compact [Hash64|BitsPacked] pour une portabilité totale vers Rust.
+- **Stable Context Management** : Correction du moteur de génération pour préserver le contexte sémantique (C) entre les prompts.
+- **Fast Loader** : Chargement instantané des Hypervecteurs packés depuis le disque.
+### Améliorations
+- **V3 Engine** : Unification du guidage sémantique et local pour une meilleure cohérence.
+- **Memory Optimization** : Utilisation de `np.packbits` pour diviser par 8 la taille des fichiers de modèles.

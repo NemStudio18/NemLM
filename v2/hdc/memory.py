@@ -8,6 +8,7 @@ HDC Memory Layer V2 (Optimisée)
 import numpy as np
 from .representation import encode_context, encode_token, hamming
 from .lsh import LSHIndex
+from .persistence import save_memory, load_memory
 
 class MemoryEntry:
     def __init__(self, dim: int):
@@ -21,6 +22,13 @@ class MemoryEntry:
         influence = (token_hv.astype(np.int32) * 2 - 1) * delta
         self.weighted_sum += influence
         self.token_weights[token] = self.token_weights.get(token, 0) + delta
+        self.bundle_cache = None
+
+    def merge(self, other: 'MemoryEntry'):
+        """Fusionne les poids d'une autre entrée (Somme vectorielle)."""
+        self.weighted_sum += other.weighted_sum
+        for token, weight in other.token_weights.items():
+            self.token_weights[token] = self.token_weights.get(token, 0) + weight
         self.bundle_cache = None
 
 class AssociativeMemory:
@@ -99,17 +107,37 @@ class AssociativeMemory:
             res = self._lsh.query(bundle, k=k)
             return [r[0] for r in res]
         
-        if vocabulary is None:
-            return []
-            
         if self._vocab_matrix is None or len(self._vocab_list) != len(vocabulary):
-            self._vocab_matrix = np.stack([encode_token(t, self.dim) for t in vocabulary])
             self._vocab_list = vocabulary
+            # On stocke la matrice en format signe (-1, 1) pour np.dot
+            self._vocab_matrix = (np.stack([encode_token(t, self.dim) for t in vocabulary]).astype(np.int8) * 2 - 1)
             
-        diffs = np.bitwise_xor(self._vocab_matrix, bundle[np.newaxis, :])
-        distances = np.count_nonzero(diffs, axis=1)
+        # Distance de Hamming via produit matriciel (tres rapide)
+        # Dist = (D - dot(A_signed, B_signed)) / 2
+        q_signed = (bundle.astype(np.int8) * 2 - 1)
+        scores = np.dot(self._vocab_matrix, q_signed)
+        distances = (self.dim - scores) // 2
+        
         top_k_idx = np.argsort(distances)[:k]
         return [vocabulary[i] for i in top_k_idx]
+
+    def merge(self, other: 'AssociativeMemory'):
+        """Fusionne une autre mémoire associative dans celle-ci."""
+        for key, other_entry in other.storage.items():
+            if key not in self.storage:
+                self.storage[key] = MemoryEntry(self.dim)
+            self.storage[key].merge(other_entry)
+
+    def save(self, path: str):
+        save_memory(path, self.storage, self.dim)
+
+    def load(self, path: str):
+        loaded_storage, dim = load_memory(path)
+        if loaded_storage:
+            self.storage = loaded_storage
+            self.dim = dim
+            return True
+        return False
 
     @property
     def size(self) -> int:

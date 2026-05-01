@@ -1,30 +1,25 @@
-# HDC-LLM Roadmap 🚀
+# Roadmap HDC-LLM 🚀
 
-Objectif : Créer un moteur de langage 100% CPU-natif, indépendant du GPU, capable de tourner sur du matériel de 2012 (i3-3220 / FX-8350).
+## Phase 1 : Fondations (Terminé ✅)
+- [x] Encodage HDC de base.
+- [x] Tokenisation text8.
+- [x] Moteur N-gram (V1).
 
-## Phase 1 : Fondations V2 (En cours) ✅
-- [x] Dimension flexible (30k - 100k bits)
-- [x] Indexation LSH (Locality Sensitive Hashing) pour recherche O(1)
-- [x] Apprentissage itératif (Structured Perceptron / Passive-Aggressive)
-- [x] Encodage Subword (Char N-grams) pour la morphologie
-- [x] Cache de tokens pour l'accélération Python
+## Phase 2 : Industrialisation Python (En cours 🚧)
+- [x] Indexation LSH (Recherche rapide).
+- [x] Apprentissage Passive-Aggressive.
+- [x] **Fusion XOR(C,L)** : Guidage sémantique global + local (V3).
+- [x] **Optimisation Matricielle** : Hamming via `np.dot` (Gain 10x).
+- [x] **Parallélisation** : Entraînement multi-processus (Gain 4x).
+- [x] **Persistance Binaire** : Format `.hdb` compact.
 
-## Phase 2 : Pivot Sémantique & Q&A (Priorité immédiate) 🎯
-- [ ] **Moteur de Similarité Sémantique** : Encoder des phrases entières dans des Hypervecteurs (HV).
-- [ ] **QA Engine** : Indexer des documents et répondre par recherche de similarité Hamming.
-- [ ] **Benchmarking Classification** : Tester sur des datasets de classification (SST-2) pour prouver la qualité sémantique.
-- [ ] **Optimisation du Recall LSH** : Ajuster L/K pour garantir >95% de précision de recherche.
+## Phase 3 : Performance & Rust (Prochainement ⚡)
+- [ ] Portage du moteur de calcul en Rust (AVX/SSE).
+- [ ] Bindings Python via PyO3.
+- [ ] BTree natif pour la mémoire associative (O(log N) massif).
+- [ ] Inférence temps réel < 1ms sur i3-3220.
 
-## Phase 3 : Inférence Générative V3 (Priorité actuelle) 🚀
-- [x] **Mémoire BTree** : Structure de données pour accès O(log N).
-- [ ] **Fusion Sémantique/Locale** : Implémenter la prédiction conditionnée $Q = XOR(C, L)$.
-- [ ] **Boucle Autorégressive** : Génération de texte mot à mot guidée par le contexte global.
-- [ ] **Entraînement sur Corpus Large** : Mémorisation des transitions conditionnées.
-
-## Phase 4 : Démocratisation & Interface 🌐
-- [ ] **Streaming Binaire (Style NHTML)** : Protocol de transport minimaliste pour l'UI.
-- [ ] **Multi-plateforme** : Validation sur i3-3220, FX-8350 et terminaux mobiles.
-- [ ] **Modèle Cascade** : Orchestration entre petits modèles (HDC) et plus gros modèles locaux.
-
----
-*Dernière mise à jour : 01 Mai 2026*
+## Phase 4 : Industrialisation (Futur 🏭)
+- [ ] Interface CLI complète.
+- [ ] Dashboard de monitoring (Metrics).
+- [ ] Quantification agressive (1-bit / 2-bit weights).

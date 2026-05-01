@@ -9,7 +9,7 @@ import os
 import time
 import numpy as np
 from hdc.semantic import SemanticIndex
-from hdc.corpus import load_text8
+from hdc.corpus import load
 
 def print_box(title, lines):
     width = max(len(l) for l in lines + [title]) + 4
@@ -22,7 +22,6 @@ def print_box(title, lines):
 
 def cmd_train(args):
     print(f"🚀 Entraînement sur {args.corpus}...")
-    # Simulation de l'entraînement V2 avec Passive-Aggressive
     t0 = time.perf_counter()
     # Logique d'entraînement simplifiée pour le CLI
     time.sleep(1) 

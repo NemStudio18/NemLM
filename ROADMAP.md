@@ -15,10 +15,11 @@ Objectif : Créer un moteur de langage 100% CPU-natif, indépendant du GPU, capa
 - [ ] **Benchmarking Classification** : Tester sur des datasets de classification (SST-2) pour prouver la qualité sémantique.
 - [ ] **Optimisation du Recall LSH** : Ajuster L/K pour garantir >95% de précision de recherche.
 
-## Phase 3 : Optimisation & Industrialisation 🛠️
-- [ ] **Refactoring Rust** : Portage des fonctions critiques (XOR, popcount, LSH) pour atteindre <100µs.
-- [ ] **Quantization int8/int16** : Intégrer des couches de composition entières pour la logique complexe.
-- [ ] **BTree KV Cache** : Gérer les contextes longs via des structures de données binaires paginées.
+## Phase 3 : Inférence Générative V3 (Priorité actuelle) 🚀
+- [x] **Mémoire BTree** : Structure de données pour accès O(log N).
+- [ ] **Fusion Sémantique/Locale** : Implémenter la prédiction conditionnée $Q = XOR(C, L)$.
+- [ ] **Boucle Autorégressive** : Génération de texte mot à mot guidée par le contexte global.
+- [ ] **Entraînement sur Corpus Large** : Mémorisation des transitions conditionnées.
 
 ## Phase 4 : Démocratisation & Interface 🌐
 - [ ] **Streaming Binaire (Style NHTML)** : Protocol de transport minimaliste pour l'UI.

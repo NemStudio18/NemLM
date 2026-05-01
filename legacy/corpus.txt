@@ -1,0 +1,217 @@
+le chat dort sur le tapis.
+le chien court dans le jardin.
+la souris mange le fromage.
+le chat regarde la souris.
+le petit chat mange sa pâtée.
+le grand chien aboie fort.
+le jardin est très beau.
+la maison est grande et bleue.
+il fait beau aujourd'hui.
+le soleil brille dans le ciel.
+le chat attrape la souris.
+le chien aime courir.
+le petit garçon joue au ballon.
+la petite fille chante une chanson.
+le professeur explique la leçon.
+les élèves écoutent le professeur.
+le livre est sur la table.
+la pomme est rouge et sucrée.
+le ciel est bleu et dégagé.
+les oiseaux chantent le matin.
+le chat noir dort sur le canapé.
+le chien blanc joue avec un os.
+le vent souffle dans les arbres.
+la pluie tombe sur le toit.
+le café est chaud et bon.
+le gâteau est délicieux.
+le chat saute sur la table.
+le chien attend son maître.
+la porte est ouverte.
+la fenêtre est fermée.
+le vélo est dans le garage.
+la voiture est devant la maison.
+le jardinier arrose les fleurs.
+le boulanger fait du pain.
+le boucher vend de la viande.
+le facteur apporte le courrier.
+le train arrive à l'heure.
+le bus s'arrête au coin.
+le taxi roule vite.
+le métro est bondé.
+le restaurant est complet.
+le menu est varié.
+le serveur apporte l'addition.
+le client paie avec sa carte.
+le cinéma projette un film.
+le théâtre joue une pièce.
+le musée expose des tableaux.
+le parc est plein d'enfants.
+le lac est calme et paisible.
+le bateau navigue sur l'eau.
+le pêcheur attrape un poisson.
+la montagne est haute et enneigée.
+la forêt est dense et sombre.
+le loup hurle à la lune.
+le renard se cache dans le terrier.
+le lapin mange une carotte.
+le cheval galope dans le pré.
+la vache broute l'herbe.
+le cochon se roule dans la boue.
+le canard nage dans la mare.
+le poulet picore le grain.
+le fermier travaille dur.
+le soleil se couche à l'ouest.
+la lune se lève à l'est.
+les étoiles brillent dans la nuit.
+le hibou hulule dans le bois.
+le chaton joue avec une pelote.
+le chiot aboie joyeusement.
+le bébé dort dans son berceau.
+le vieil homme marche avec une canne.
+la vieille femme tricote un pull.
+le jeune homme court le marathon.
+la jeune femme lit un roman.
+le journal rapporte les nouvelles.
+le magazine publie des articles.
+le dictionnaire définit les mots.
+le cahier est rempli de notes.
+le crayon est bien taillé.
+le stylo écrit en bleu.
+le cartable est lourd.
+le sac à dos est pratique.
+le voyageur attend sur le quai.
+le touriste prend des photos.
+le guide explique l'histoire.
+le monument est impressionnant.
+le château est ancien.
+le palais est magnifique.
+le roi porte une couronne.
+la reine salue la foule.
+le prince monte à cheval.
+la princesse porte une robe.
+le chevalier combat le dragon.
+le magicien fait des tours.
+le clown fait rire les enfants.
+le musicien joue du piano.
+le peintre utilise des pinceaux.
+le sculpteur travaille la pierre.
+le poète écrit des vers.
+le chanteur a une belle voix.
+le danseur fait des entrechats.
+le public applaudit chaleureusement.
+le succès est au rendez-vous.
+le bonheur est simple.
+le travail est nécessaire.
+le repos est mérité.
+le silence est d'or.
+le courage est admirable.
+la sagesse vient avec l'âge.
+le temps passe vite.
+la vie est courte.
+le monde est vaste.
+le savoir est une arme.
+le futur est incertain.
+le passé est derrière nous.
+le présent est un cadeau.
+le rêve est possible.
+le espoir fait vivre.
+le amour est fort.
+le amitié est précieuse.
+le respect est essentiel.
+le pardon est libérateur.
+le partage est enrichissant.
+le sourire est contagieux.
+le rire est thérapeutique.
+le pleur est humain.
+le cri est libérateur.
+le chant est universel.
+le langage est complexe.
+le symbole est puissant.
+le signe est clair.
+le geste est amical.
+le regard est expressif.
+le souffle est vital.
+le coeur bat fort.
+le sang circule.
+le corps est une machine.
+le esprit est brillant.
+le âme est éternelle.
+le destin est écrit.
+le hasard fait bien les choses.
+le choix est difficile.
+le doute s'installe.
+le certitude est rare.
+le vérité est nue.
+le mensonge est traître.
+le secret est gardé.
+le mystère s'épaissit.
+le énigme est résolue.
+le solution est trouvée.
+le succès est garanti.
+le échec est une leçon.
+le erreur est humaine.
+le pardon est divin.
+le ciel est la limite.
+le univers est infini.
+le temps est relatif.
+le espace est immense.
+le matière est énergie.
+le atome est petit.
+le étoile est brillante.
+le planète est bleue.
+le terre est ronde.
+le mer est profonde.
+le océan est vaste.
+le île est isolée.
+le continent est grand.
+le pays est libre.
+le ville est bruyante.
+le village est calme.
+le hameau est petit.
+le sentier est étroit.
+le chemin est long.
+le route est droite.
+le autoroute est rapide.
+le pont est solide.
+le tunnel est sombre.
+le viaduc est haut.
+le barrage est impressionnant.
+le port est actif.
+le aéroport est moderne.
+le gare est animée.
+le marché est coloré.
+le boutique est achalandée.
+le centre commercial est grand.
+le hôtel est luxueux.
+le camping est sauvage.
+le gîte est accueillant.
+le refuge est sûr.
+le abri est nécessaire.
+le toit est protecteur.
+le mur est solide.
+le sol est ferme.
+le plafond est haut.
+le escalier est raide.
+le ascenseur est rapide.
+le couloir est long.
+le pièce est claire.
+le chambre est calme.
+le salon est confortable.
+le cuisine est moderne.
+le salle de bain est propre.
+le toilettes sont là-bas.
+le jardin est fleuri.
+le terrasse est ensoleillée.
+le balcon est petit.
+le garage est plein.
+le cave est fraîche.
+le grenier est poussiéreux.
+le maison est habitée.
+le famille est réunie.
+le amis sont là.
+le fête commence.
+le joie est immense.
+le bonheur est complet.
+le paix est retrouvée.
+le amour est présent.
+le vie est belle.

@@ -22,10 +22,10 @@ Le moteur NemLM V3 repose sur une fusion autorégressive :
 3. **Associative Memory** : Retrieval ultra-rapide via produit matriciel optimisé.
 
 ## 📈 Statistiques de Performance (Python Baseline)
-*Testé sur Intel i3-3220 (2 Cores / 4 Threads)*
-- **Débit Entraînement** : ~350 tokens/sec (Parallel 2 Workers).
-- **Latence Inférence** : < 10ms par token (Python + NumPy).
-- **Capacité** : 300 000 tokens (6 000 phrases) entraînés en ~15 minutes.
+*Benchmarks en cours de calcul sur Intel i3-3220 (2 Cores / 4 Threads)*
+- **Débit Entraînement** : En cours d'évaluation...
+- **Latence Inférence** : En cours d'évaluation...
+- **Capacité** : Test massif de 300 000 tokens en cours.
 
 ## 💻 Utilisation
 ```bash

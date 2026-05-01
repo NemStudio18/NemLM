@@ -1,7 +1,7 @@
 # 🧠 NemLM (HDC-LLM)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![CPU: Legacy Native](https://img.shields.io/badge/CPU-Legacy%20Native-blue.svg)](#)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![CPU: Legacy Native](https://img.shields.io/badge/CPU-Legacy%20Native-orange.svg)](#)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-green.svg)](#)
 
 **NemLM** est un moteur de langage expérimental basé sur le **Hyperdimensional Computing (HDC)**. Conçu spécifiquement pour les architectures CPU legacy (comme l'Intel i3-3220), NemLM remplace l'attention flottante traditionnelle par des opérations binaires massives (`XOR`, `Popcount`, `Rotations`).
@@ -13,33 +13,30 @@ L'objectif de NemLM est de prouver qu'un modèle de langage capable de général
 - **Indépendance GPU** : Zéro calcul flottant (FP32/FP16) lors de l'inférence sémantique.
 - **Vitesse Bitwise** : Utilisation intensive du produit scalaire binaire et des distances de Hamming.
 - **Fusion XOR(C,L)** : Architecture unique combinant Contexte Global (Sémantique) et Contexte Local (N-grams).
-- **Empreinte Mémoire** : Stockage compressé (1 bit par poids) via le format binaire `.hdb`.
+- **Licence AGPL v3** : Logiciel libre et open-source.
 
-## 🛠️ Architecture V3 (Génération)
+## 🛠️ Architecture V3
 Le moteur NemLM V3 repose sur une fusion autorégressive :
 1. **Semantic Layer** : Encodage de phrases par bundling HDC.
-2. **Contextual Layer** : Encodage de séquences par rotations circulaires basées sur des nombres premiers.
-3. **Associative Memory** : Retrieval ultra-rapide en $O(D)$ via produit matriciel optimisé.
+2. **Contextual Layer** : Encodage de séquences par rotations circulaires.
+3. **Associative Memory** : Retrieval ultra-rapide via produit matriciel optimisé.
 
-## 📈 Roadmap
-- [x] **V1** : Preuve de concept N-grams.
-- [x] **V2** : Indexation LSH et Apprentissage Passive-Aggressive.
-- [x] **V3** : Prototype de génération conditionnée (Python).
-- [ ] **Phase Rust** : Portage natif pour des performances SSE4.2/AVX.
-- [ ] **NemLM CLI** : Interface industrielle pour l'entraînement et le test.
+## 📈 Statistiques de Performance (Python Baseline)
+*Testé sur Intel i3-3220 (2 Cores / 4 Threads)*
+- **Débit Entraînement** : ~350 tokens/sec (Parallel 2 Workers).
+- **Latence Inférence** : < 10ms par token (Python + NumPy).
+- **Capacité** : 300 000 tokens (6 000 phrases) entraînés en ~15 minutes.
 
-## 💻 Installation
+## 💻 Utilisation
 ```bash
-git clone https://github.com/NemStudio18/NemLM.git
-cd NemLM
-pip install numpy
+# Entraîner le modèle avec des paramètres personnalisés
+python src/train.py --phrases 1000 --workers 2
 ```
 
-## 🧪 Benchmark
-Pour lancer le benchmark de génération massif (300k tokens) :
-```bash
-python v2/parallel_train.py
-```
+## 🏗️ Structure du Projet
+- `src/` : Moteur NemLM V3 (Cerveau, Mémoire, Représentation).
+- `legacy/` : Prototypes V1 et V2 (Recherche sémantique).
+- `data/` : Corpus de test (Text8).
 
 ---
-*Développé avec passion pour l'informatique bas niveau et les architectures CPU optimisées.*
+*Développé sous licence AGPL v3 pour la communauté du calcul frugal.*

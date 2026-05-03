@@ -1,56 +1,41 @@
-# Source Code - NemLM V5.3 Multi-Worker
+# Source Code - NemLM V5.3 (HDC-AR High-Fidelity)
 
-Ce document contient les briques logicielles critiques du moteur NemLM dans sa version **Parallélisée (V5.3)**.
+Ce document contient les briques logicielles critiques du moteur NemLM dans sa version **Industrialisée (V5.3)**.
 
-## 0. hdc/parallel_engine.py (Moteur Multi-Worker)
-Gère l'entraînement asynchrone sur plusieurs cœurs avec filtrage des singletons.
+## 1. hdc/compact_engine.py (Inférence Haute Fidélité)
+Optimisé pour la vitesse et le fallback sémantique total.
 
 ```python
-import multiprocessing as mp
-from hdc.memory import AssociativeMemory
-from hdc.representation import encode_context
-
-def training_worker(task_queue, db_path, orders, dim):
-    memory = AssociativeMemory(dim, db_path=db_path)
-    seen_once = set() # Filtrage RAM
-    
-    while True:
-        task = task_queue.get()
-        if task is None: break
-        
-        context_tokens, target_token = task
-        for n in orders:
+class CompactEngine:
+    def predict_next(self, context_tokens: list[str], top_k: int = 5) -> list[str]:
+        # 1. Backoff Multi-échelle (Précision Syntaxique)
+        total_scores = {}
+        for n in [5, 4, 3, 2]:
             sub_context = context_tokens[-(n-1):] if n > 1 else []
-            ngram_id = hash((tuple(sub_context), target_token))
-            
-            if ngram_id in seen_once:
-                # Écriture uniquement à la 2ème occurrence
-                hv = encode_context(sub_context, dim)
-                memory.learn_one_pass(hv, target_token)
-            else:
-                seen_once.add(ngram_id)
-    memory.commit()
+            q_hv = encode_context(sub_context, self.dim)
+            preds = self.memory.get_preds(q_hv)
+            if preds:
+                # Pondération V3 (n^4) pour écraser le bruit
+                weight_factor = n ** 4
+                for token, count in preds:
+                    total_scores[token] = total_scores.get(token, 0) + (count * weight_factor)
+                
+                # Early Exit (Count > 2 sur 5-gramme)
+                if n == 5 and preds[0][1] > 2: break
+
+        # 2. Fallback Attention Sémantique (Cohérence Globale)
+        l_hv = encode_context(context_tokens, self.dim)
+        g_hv = self.accumulator.get_hv()
+        query_hv = np.bitwise_xor(l_hv, g_hv)
+        
+        attn_hv = self.memory.attention.forward(query_hv, k=8)
+        return self.semantic.find_nearest_topk(attn_hv, k=top_k)
 ```
 
-## 1. hdc/representation.py (Primitives & Accumulateur)
+## 2. hdc/representation.py (Primitives & Accumulateur)
 Gère l'encodage binaire, les rotations et l'accumulation thématique.
 
 ```python
-import numpy as np
-
-DIM = 10000
-
-def encode_token(token: str, dim: int = DIM) -> np.ndarray:
-    seed = hash(token) % (2**32)
-    rs = np.random.RandomState(seed)
-    bits = rs.randint(0, 2, size=dim, dtype=np.uint8)
-    return np.packbits(bits)
-
-def rotate(hv_packed: np.ndarray, shift: int, dim: int = DIM) -> np.ndarray:
-    bits = np.unpackbits(hv_packed)[:dim]
-    rotated = np.roll(bits, shift)
-    return np.packbits(rotated)
-
 def encode_context(tokens: list[str], dim: int) -> np.ndarray:
     packed_result = np.zeros(dim // 8, dtype=np.uint8)
     for i, token in enumerate(reversed(tokens)):
@@ -59,119 +44,98 @@ def encode_context(tokens: list[str], dim: int) -> np.ndarray:
         packed_result = np.bitwise_xor(packed_result, hv_pos_packed)
     return packed_result
 
-def encode_context_n(tokens, n, dim):
-    return encode_context(tokens[-n:], dim)
-
 class ContextAccumulator:
-    def __init__(self, dim: int = DIM, decay: float = 0.95):
-        self.dim = dim
-        self.decay = decay
-        self.weighted_sum = np.zeros(dim, dtype=np.int16)
-        
     def add(self, token_hv_packed: np.ndarray):
         bits = np.unpackbits(token_hv_packed)[:self.dim].astype(np.int16)
         bits[bits == 0] = -1
-        self.weighted_sum = (self.weighted_sum * int(self.decay * 100)) // 100
+        # Decay sémantique de 5% par token
+        self.weighted_sum = (self.weighted_sum * 95) // 100
         self.weighted_sum += bits
-        
-    def get_hv(self) -> np.ndarray:
-        bits = (self.weighted_sum > 0).astype(np.uint8)
-        return np.packbits(bits)
-
-    def reset(self):
-        self.weighted_sum.fill(0)
-```
-
-## 2. hdc/memory.py (Mémoire Associative & Backoff)
-Gestion du stockage SQLite, du cache LRU et du vote pondéré.
-
-```python
-import numpy as np
-import sqlite3
-import pickle
-import time
-from collections import OrderedDict
-
-class MemoryEntry:
-    def __init__(self, dim: int):
-        self.dim = dim
-        self.weighted_sum = np.zeros(dim, dtype=np.int16)
-        self.token_weights = {}
-
-    def update(self, token_hv: np.ndarray, weight: int = 1, token_name: str = None):
-        unpacked = np.unpackbits(token_hv).astype(np.int16)
-        unpacked[unpacked == 0] = -1
-        self.weighted_sum += unpacked * weight
-        if token_name:
-            self.token_weights[token_name] = self.token_weights.get(token_name, 0) + weight
-
-class AssociativeMemory:
-    def __init__(self, dim: int, db_path: str):
-        self.dim = dim
-        self.conn = sqlite3.connect(db_path)
-        self.ram_cache = OrderedDict()
-        self.write_buffer = {}
-        self.last_commit_time = time.time()
-
-    def predict_with_backoff(self, context_tokens: list[str], dim: int, k: int = 5) -> list[str]:
-        total_scores = {}
-        for n in [5, 4, 3, 2]:
-            sub_context = context_tokens[-(n-1):] if n > 1 else []
-            q_hv = encode_context(sub_context, dim)
-            results = self.predict_topk(q_hv, k=k)
-            if results:
-                weight_factor = n ** 3
-                for token, count in results:
-                    total_scores[token] = total_scores.get(token, 0) + (count * weight_factor)
-                if n == 5 and results[0][1] > 2: break
-        return [t[0] for t in sorted(total_scores.items(), key=lambda x: x[1], reverse=True)[:k]]
 ```
 
 ## 3. hdc/attention.py (Darwinian Attention)
-Fallback sémantique avec popcount et survie par utilité.
+Mécanisme de repli utilisant la distance de Hamming et la survie par utilité.
 
 ```python
-import numpy as np
-
-POPCOUNT_TABLE = np.array([bin(i).count('1') for i in range(256)], dtype=np.uint8)
-
 def hamming_batch(query_hv, keys_matrix):
+    """Calcul ultra-rapide via table de lookup."""
     xor_res = np.bitwise_xor(keys_matrix, query_hv)
     return POPCOUNT_TABLE[xor_res].sum(axis=1)
 
 class AttentionHead:
-    def __init__(self, dim, n_keys):
-        self.keys = np.zeros((n_keys, dim // 8), dtype=np.uint8)
-        self.values = np.zeros((n_keys, dim // 8), dtype=np.uint8)
-        self.hits = np.zeros(n_keys, dtype=np.uint32)
-
     def learn(self, context_hv, next_token_hv):
-        if not self.full:
-            idx = self.ptr; self.ptr += 1
-        else:
+        if self.full:
+            # Darwinisme : on écrase le souvenir le moins utile (min hits)
             idx = np.argmin(self.hits)
+        else:
+            idx = self.ptr; self.ptr += 1
         self.keys[idx] = context_hv
         self.values[idx] = next_token_hv
         self.hits[idx] = 1
 ```
 
-## 4. hdc/v3_engine.py (Orchestrateur)
-Fusion Local/Global et boucle AR.
+## 4. hdc/parallel_engine.py (Entraînement Turbo)
+Entraînement asynchrone multi-processus avec workers spécialisés.
 
 ```python
-class V3Engine:
-    def predict_next(self, context_tokens: list[str], top_k: int = 5) -> list[str]:
-        # 1. Backoff (Local)
-        exact_preds = self.memory.predict_with_backoff(context_tokens, self.dim, k=top_k)
-        if exact_preds:
-            self.accumulator.add(self.semantic.get_word_hv(exact_preds[0]))
-            return exact_preds
-            
-        # 2. Attention (Thematique)
-        l_hv = encode_context(context_tokens, self.dim)
-        g_hv = self.accumulator.get_hv()
-        query_hv = np.bitwise_xor(l_hv, g_hv)
-        
-        attention_hv = self.attention.forward(query_hv, k=8)
-        return self.semantic.find_nearest_topk(attention_hv, k=top_k)
+def training_worker(task_queue, db_path, orders, dim):
+    memory = AssociativeMemory(dim, db_path=db_path)
+    while True:
+        task = task_queue.get()
+        if task is None: break
+        context_tokens, target_token = task
+        # Apprentissage multi-ordre sans filtrage pour la fidélité
+        for n in orders:
+            hv = encode_context(context_tokens[-(n-1):], dim)
+            memory.learn_one_pass(hv, target_token)
 ```
+
+## 5. hdc/reasoning.py (Reasoning Accumulator - Phase 4)
+Mécanisme émergent de réflexion par convergence Hamming.
+
+```python
+def reason(self, question: str, max_steps: int = 5):
+    q_hv = encode_context(question.split(), self.dim)
+    self.accumulator.reset()
+    self.accumulator.add(q_hv)
+    
+    for step in range(max_steps):
+        current_hv = self.accumulator.get_hv()
+        # Retrieval multi-step
+        retrieval = self.predict_next_from_hv(current_hv)
+        if not retrieval: break
+        
+        # Injection du résultat pour orienter le prochain step
+        self.accumulator.add(encode_token(retrieval[0], self.dim))
+        
+        # Convergence : si le nouveau contexte est proche du précédent
+        if hamming(current_hv, self.accumulator.get_hv()) < self.dim // 8:
+            break
+```
+
+## 6. hdc/binary_layers.py (Binary Transformer - Phase 3B)
+Cœur de l'apprentissage différentiable binaire (STE Backprop).
+
+```python
+class BinaryLinear:
+    def forward(self, x):
+        # Binarisation des poids latents float32 -> binaire (-1, 1)
+        w_mean = np.mean(self.weights_latent)
+        self.w_bin = np.sign(self.weights_latent - w_mean)
+        return np.dot(x, self.w_bin.T) + self.bias
+
+    def backward(self, x, grad_output, lr=0.01):
+        # Straight-Through Estimator (STE) + Gradient Clipping
+        grad_w = np.outer(grad_output, x)
+        norm = np.linalg.norm(grad_w)
+        if norm > 1.0: grad_w /= norm # Stabilisation
+        self.weights_latent -= lr * grad_w
+
+## 7. train_bt_v1.py (Prototype Validation)
+Script de validation du cœur différentiable :
+- **Mode Ultra-Light** : 512-dim pour convergence rapide.
+- **Déterminisme** : Utilisation de HVs déterministes par hash pour le prototype.
+- **Logging** : Suivi persistent dans `result_tests/bt_prototype_log.txt`.
+
+---
+*NemStudio - Advanced Agentic Coding Project*

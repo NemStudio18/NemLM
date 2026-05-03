@@ -4,7 +4,7 @@ import os
 from hdc.memory import AssociativeMemory
 from hdc.representation import encode_context
 
-def training_worker(task_queue, db_path, orders, dim):
+def training_worker(task_queue, db_path, orders, dim, use_pruning=True):
     """
     Worker spécialisé dans certains ordres de n-grammes.
     Ouvre sa propre connexion SQLite.
@@ -31,16 +31,21 @@ def training_worker(task_queue, db_path, orders, dim):
                 else:
                     sub_context = context_tokens[-(n-1):]
                 
-                # Clé unique pour le filtrage (hash du n-gramme complet)
-                ngram_id = hash((tuple(sub_context), target_token))
-                
-                if ngram_id in seen_once:
-                    # DEUXIÈME FOIS : On encode et on enregistre en base
+                if use_pruning:
+                    # Clé unique pour le filtrage (hash du n-gramme complet)
+                    ngram_id = hash((tuple(sub_context), target_token))
+                    
+                    if ngram_id in seen_once:
+                        # DEUXIÈME FOIS : On encode et on enregistre en base
+                        n_gram_hv = encode_context(sub_context, dim)
+                        memory.learn_one_pass(n_gram_hv, target_token)
+                    else:
+                        # PREMIÈRE FOIS : On garde en mémoire RAM
+                        seen_once.add(ngram_id)
+                else:
+                    # Mode sans pruning : on apprend tout directement
                     n_gram_hv = encode_context(sub_context, dim)
                     memory.learn_one_pass(n_gram_hv, target_token)
-                else:
-                    # PREMIÈRE FOIS : On garde en mémoire RAM
-                    seen_once.add(ngram_id)
         
         # Commit périodique pour libérer le WAL
         if task_queue.qsize() == 0:
@@ -50,12 +55,19 @@ def training_worker(task_queue, db_path, orders, dim):
     memory.close()
 
 class V3ParallelEngine:
-    def __init__(self, dim, db_path, num_workers=3):
+    def __init__(self, dim, db_path, num_workers=3, use_pruning=True):
         self.dim = dim
         self.db_path = db_path
         self.num_workers = num_workers
+        self.use_pruning = use_pruning
         self.task_queue = mp.Queue(maxsize=1000)
         self.processes = []
+        
+        # Initialisation préalable de la base par le process parent
+        # Cela évite que les workers se battent pour le verrou (LOCK) au démarrage
+        init_mem = AssociativeMemory(dim, db_path=db_path)
+        init_mem.commit()
+        init_mem.close()
         
         # Spécialisation des workers par ordre
         # Worker 0: Ordre 2 (Bigrams)
@@ -66,7 +78,7 @@ class V3ParallelEngine:
         for i in range(num_workers):
             p = mp.Process(
                 target=training_worker, 
-                args=(self.task_queue, db_path, order_sets[i], dim)
+                args=(self.task_queue, db_path, order_sets[i], dim, self.use_pruning)
             )
             p.start()
             self.processes.append(p)

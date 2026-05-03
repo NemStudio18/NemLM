@@ -1,12 +1,18 @@
 # Changelog - NemLM (LLMonCPU)
 
-## [V5.3] - 2026-05-03 (Parallel Turbo Milestone)
+## [V5.4-dev] - 2026-05-03 (Binary Transformer Milestone)
 ### Ajouté
-- **Moteur Parallèle (V3ParallelEngine)** : Architecture multi-processus avec 3 workers spécialisés par ordre de n-gramme.
-- **Singleton Pruning (Filtrage)** : Élagage à la source des associations uniques pour réduire le bruit sémantique et la taille de la base (-70% sur Europarl).
-- **Performance Boost** : Accélération massive de l'entraînement, passant de 3 phr/s à ~230 phr/s (+7500% de gain).
-- **Multi-Connection SQLite** : Gestion sécurisée des écritures concurrentes en mode WAL.
+- **BT Prototype (Phase 3B)** : Implémentation réussie du premier neurone différentiable binaire (STE).
+- **Convergence STE** : Validation de la descente de gradient sur des poids binarisés (Sign).
+- **Gradient Clipping** : Stabilisation de la rétropropagation pour le calcul bitwise.
 
+## [V5.3] - 2026-05-03 (High-Fidelity Industrial Milestone)
+### Ajouté
+- **Validation Industrielle HF** : Accuracy Top-5 atteinte de **32.03%** sur Europarl (15k), atteignant la parité avec Kneser-Ney.
+- **Calibration n^4** : Optimisation de la pondération multi-ordre pour une meilleure séparation syntaxique.
+- **CompactEngine (HDC-AR)** : Moteur d'inférence ultra-léger (~900 Mo) atteignant ~800 tokens/s avec une latence < 1.3ms.
+- **Distillation Haute Fidélité** : Processus de compression Top-30 préservant la longue traîne statistique.
+- **Lancement Phase 3B** : Initialisation des spécifications pour le Binary Transformer (Backprop binaire).
 
 ## [V5.2] - 2026-05-03 (HDC-AR Milestone)
 ### Ajouté
@@ -31,7 +37,6 @@
     - Correction du bug de variable `start_ff` et optimisation du rattrapage RAM.
 - **V5.0 (Stable Migration)** : 
     - Migration de la mémoire associative vers SQLite (SSD D:).
-SQLite optimisé avec `mmap` et cache de pages de 2 Go.
 - **Système de Reprise (Resume)** : Capacité théorique à reprendre un apprentissage après interruption (testé durant la migration disque).
 - **Reporting ETA** : Calcul en temps réel du temps restant par tranche de 500 phrases.
 

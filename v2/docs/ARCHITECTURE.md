@@ -1,57 +1,58 @@
-# Architecture Technique NemLM V5.3 (Multi-Worker)
+# Architecture Technique NemLM V5.3 (High-Fidelity)
 
 ## 1. Structure du Système
-NemLM est un moteur de langage 100% binaire basé sur le calcul hyperdimensionnel (HDC). La version 5.3 introduit une architecture **multi-processus** pour l'entraînement à haute performance.
+NemLM est un moteur de langage 100% binaire basé sur le calcul hyperdimensionnel (HDC). La version 5.3 introduit la séparation entre le **Moteur d'Entraînement** (Lourd/Parallèle) et le **Moteur d'Inférence** (Compact/Optimisé).
 
 ```text
 v2/
 ├── hdc/
-│   ├── parallel_engine.py # Moteur Multi-Worker (3 Workers spécialisés)
-│   ├── v3_engine.py      # Orchestrateur HDC-AR (Fusion Local/Global)
-│   ├── memory.py         # Associative Memory (SQLite + Multi-scale Backoff)
-│   ├── attention.py      # Multi-Head Binary Attention (Evolutionary Memory)
-│   ├── semantic.py       # Semantic Index (Mapping Vocabulaire <-> HV)
-│   └── representation.py  # Primitives HDC (XOR, Rotations, Accumulator)
-└── D:\memory.nemdb       # Stockage concurrent (Mode WAL / busy_timeout 10s)
+│   ├── parallel_engine.py # Entraînement Multi-Worker (Haute Densité)
+│   ├── compact_engine.py  # Inférence Rapide (Distillée + HDC-AR)
+│   ├── v3_engine.py       # Orchestrateur de référence (Entraînement Attention)
+│   ├── memory.py          # Mémoire Associative (SQLite Full Fidelity)
+│   ├── attention.py       # Multi-Head Binary Attention (Fallback Sémantique)
+│   ├── semantic.py        # Semantic Index (Mapping Vocabulaire <-> HV)
+│   └── representation.py   # Primitives HDC (XOR, Rotations, Accumulator)
+└── D:\                   # Stockage SSD
+    ├── nemlm_v5_3_full.nemdb         # Base brute (4.8 Go)
+    └── nemlm_v5_3_compact_full.nemdb # Base distillée (924 Mo)
 ```
 
 ## 2. Architecture HDC-AR (Autorégressif)
-NemLM V5.2 introduit le concept de **HDC-AR**, fusionnant la précision syntaxique des n-grammes avec la cohérence thématique des Transformers.
+Fusion de la précision syntaxique des n-grammes (Local) avec la cohérence thématique (Global).
 
-### Les deux piliers du contexte :
-1.  **Contexte Local (Syntaxe)** : Fenêtre glissante de 5 tokens encodée par rotations XOR. Utilisée pour le match exact avec **Backoff multi-échelle** (5, 4, 3, 2-grammes).
-2.  **Contexte Global (Thème)** : Géré par le `ContextAccumulator`. C'est une somme pondérée cumulative avec **decay (0.95)**. Il capture "l'odeur" sémantique de tout ce qui a été dit précédemment.
+### Les trois piliers de la prédiction :
+1.  **Contexte Local (N-grammes)** : Fenêtre glissante de 5 tokens encodée par rotations XOR. Match exact via SQLite avec **Early Exit** sur les ordres 5 et 4 pour une précision maximale.
+2.  **Contexte Global (Thème)** : Géré par le `ContextAccumulator` (decay 0.95). Il capture "l'odeur" sémantique globale et influence le repli (fallback).
+3.  **Darwinian Attention (Fallback)** : En cas d'absence de n-grammes, le système interroge 8 têtes d'attention binaire. Les souvenirs sont sélectionnés par distance de Hamming et survie darwinienne.
 
-### Flux d'Inférence (Dataflow) :
-1.  **Requête** -> Tokenization.
-2.  **Backoff Search** : Interrogation SQLite sur les ordres 5, 4, 3 et 2 (Local uniquement).
-3.  **Thematic Fallback** : Si aucun match exact n'est trouvé :
-    - Fusion `Query = Local XOR Global`.
-    - Projection sur 8 têtes d'attention binaire.
-    - Consensus par vote majoritaire sur les candidats sémantiques.
-4.  **Accumulation** : Le token choisi est injecté dans l'accumulateur global pour influencer le futur.
+## 3. Pipeline de Distillation Haute Fidélité (HF)
+Contrairement aux versions précédentes qui élaguaient les données, la V5.3 HF conserve toute la nuance statistique :
+- **Weighted Distillation** : On ne garde pas juste les mots, mais aussi leurs poids (fréquence d'apparition) pour un vote pondéré à l'inférence (`score = weight * order^4`).
+- **Top-30 Extraction** : Réduction de la taille de la base en ne gardant que les **30 meilleures prédictions** par contexte (au lieu de 5), préservant la longue traîne.
+- **Attention Relocation** : Les têtes d'attention entraînées sont migrées directement dans le moteur compact.
 
-## 3. Détail des Calculs (Ingénierie)
+## 4. Phase 3B : Binary Transformer Layer (En cours)
+L'architecture évolue vers une structure hybride :
+- **Base HDC-AR** : Fournit la précision syntaxique et les faits mémorisés.
+- **Couche BT** : Couche différentiable (Binary Backprop) pour la généralisation et la structure de phrase hors-corpus.
+- **Poids Latents** : Apprentissage float32 -> Inférence binaire (-1, 1).
+
+## 5. Performance & Métriques
+- **Taille** : ~1.38 Go pour le modèle HF Top-30 (Europarl 15k).
+- **Vitesse d'Inférence** : ~83 questions/s (12ms par test complet).
+- **Consommation RAM** : < 1 Go (Mmap SQLite).
+- **Accuracy Target** : 32.5%+ en Top-5 (KN-level).
+
+## 6. Détail des Calculs (Ingénierie)
 
 | Opération | Formule / Algorithme | Type | Implémentation |
 | :--- | :--- | :--- | :--- |
-| **Binding (Local)** | `C = A XOR rotate(B)` | Bitwise | XOR + `np.roll` |
+| **Binding (Local)** | `C = A XOR rotate(B)` | Bitwise | XOR + PRIMES-based roll |
 | **Accumulation (Global)** | `G_n = (G_{n-1} * 0.95) + current` | Integer | `np.int16` sum |
 | **Similarity** | `Hamming(A, B) = popcount(A XOR B)` | Bitwise | `POPCOUNT_TABLE` (Lookup) |
-| **Backoff weight** | `Score = count * order^3` | Weighted | Exponential decay |
-| **Evolutionary Mem** | `Replacement = min(hits)` | Darwinian | Hit counter per slot |
-| **Pruning (V5.3)** | `Filter = count >= 2` | Threshold | RAM-based Hash set |
-
-## 5. Filtrage des Singletons (Élagage)
-Pour maximiser la densité sémantique et réduire la taille de la base SQLite, la V5.3 implémente un filtre à seuil :
-- **Hash Tracking** : Chaque worker maintient un set de hashs en RAM (`seen_once`).
-- **Insertion Différée** : Un hypervecteur n'est engagé dans SQLite que lors de sa **deuxième occurrence**.
-- **Impact** : Réduction drastique du bruit statistique et accélération de l'I/O disque.
-
-## 4. Performance & Stockage
-- **Moteur SQLite** : Optimisé avec `PRAGMA journal_mode = WAL` et `mmap_size = 2Go`.
-- **Cache RAM** : Vrai cache LRU via `OrderedDict` pour les entrées de mémoire associative.
-- **Latency Target** : < 10ms par token sur CPU i3 (100% bitwise).
+| **Poids Inférence** | `Score = weight * order^4` | Weighted | Power-based importance |
+| **Early Exit** | `If order == 5 and count > 2 -> Return` | Logic | Fast-path optimization |
 
 ---
-*Dernière mise à jour : Mai 2026 - Milestone HDC-AR Phase 1 Complete.*
+*Dernière mise à jour : Mai 2026 - Milestone High-Fidelity & Reasoning Ready.*

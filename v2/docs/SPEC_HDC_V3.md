@@ -1,7 +1,7 @@
 # Spécification Technique HDC V3 (Autorégressif)
 
 ## 1. Représentation des Données
-- **Dimension (D)** : 10,000 bits (par défaut).
+- **Dimension (D)** : 10 000 bits (par défaut).
 - **Format** : Vecteurs binaires packés (uint8).
 - **Bit-packing** : Chaque octet contient 8 dimensions.
 
@@ -21,16 +21,16 @@ Pour l'attention, on fusionne les deux signaux :
 `Query_hv = L_hv XOR G_hv`
 
 ## 3. Mécanisme de Backoff (Associative Memory)
-La prédiction par match exact utilise un système de vote pondéré dégressif sur les ordres de n-grammes :
+La prédiction par match exact utilise un système de vote pondéré dégressif sur les ordres de n-grammes (V5.3 utilise n^4 pour une séparation plus forte) :
 
-| Ordre (n) | Poids (n^3) | Description |
+| Ordre (n) | Poids (n^4) | Description |
 | :--- | :--- | :--- |
-| 5 | 125 | Contexte quasi-certain |
-| 4 | 64 | Contexte fort |
-| 3 | 27 | Contexte syntaxique |
-| 2 | 8 | Contexte grammatical minimal |
+| 5 | 625 | Contexte quasi-certain |
+| 4 | 256 | Contexte fort |
+| 3 | 81 | Contexte syntaxique |
+| 2 | 16 | Contexte grammatical minimal |
 
-**Formule de score** : `Score(token) = sum(Count_n * n^3)`
+**Formule de score** : `Score(token) = sum(Count_n * n^4)`
 
 ## 4. Attention Darwinienne (Evolutionary)
 Les têtes d'attention gèrent leur mémoire de manière adaptative :

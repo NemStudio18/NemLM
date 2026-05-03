@@ -6,7 +6,9 @@ import numpy as np
 import sqlite3
 import pickle
 import os
+import time
 from functools import lru_cache
+from collections import OrderedDict
 
 class MemoryEntry:
     def __init__(self, dim: int):
@@ -50,9 +52,10 @@ class AssociativeMemory:
         self.conn.execute("CREATE TABLE IF NOT EXISTS storage (key BLOB PRIMARY KEY, data BLOB)")
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_key ON storage(key)")
         
-        # Cache RAM pour la vitesse (LRU)
-        self.ram_cache = {}
+        # Cache RAM pour la vitesse (Vrai LRU)
+        self.ram_cache = OrderedDict()
         self.write_buffer = {} # Clés modifiées à synchroniser
+        self.last_commit_time = time.time()
 
     def _hv_key(self, hv_packed: np.ndarray) -> bytes:
         return hv_packed.tobytes()
@@ -81,17 +84,21 @@ class AssociativeMemory:
         return entry
 
     def _update_ram_cache(self, key: bytes, entry: MemoryEntry):
-        if len(self.ram_cache) >= self.max_ram_entries:
-            self.ram_cache.clear()
+        if key in self.ram_cache:
+            self.ram_cache.move_to_end(key)
         self.ram_cache[key] = entry
+        if len(self.ram_cache) > self.max_ram_entries:
+            self.ram_cache.popitem(last=False) # Supprime le plus ancien (LRU)
 
     def save_entry(self, hv_packed: np.ndarray, entry: MemoryEntry):
         key = self._hv_key(hv_packed)
         self.write_buffer[key] = entry
         
-        # Si le buffer devient trop gros, on commit
-        if len(self.write_buffer) >= 1000:
+        # Commit intelligent : toutes les 60s ou tous les 500 items
+        now = time.time()
+        if len(self.write_buffer) >= 500 or (now - self.last_commit_time) > 60:
             self.commit()
+            self.last_commit_time = now
 
     def commit(self):
         if not self.write_buffer:
@@ -116,17 +123,65 @@ class AssociativeMemory:
         entry.update(target_hv, weight, target_token)
         self.save_entry(q_hv_packed, entry)
 
-    def predict_topk(self, query_hv_packed: np.ndarray, k: int = 5) -> list[str]:
-        # On cherche d'abord le match exact sur disque/RAM
+    def predict_topk(self, query_hv_packed: np.ndarray, k: int = 5) -> list[tuple[str, int]]:
+        """Retourne les Top-K tokens et leurs poids."""
         entry = self.get_entry(query_hv_packed)
-        
         if len(entry.token_weights) > 0:
             sorted_tokens = sorted(entry.token_weights.items(), key=lambda x: x[1], reverse=True)
-            return [(t[0], 0) for t in sorted_tokens[:k]]
-        
-        # Si pas de match exact, le LSH (Optionnel ici, à ré-implémenter sur la DB si besoin)
+            return sorted_tokens[:k]
         return []
 
+    def predict_with_backoff(self, context_tokens: list[str], dim: int, k: int = 5) -> list[str]:
+        """
+        Implémente le backoff multi-échelle (HDC-Backoff).
+        Interroge les ordres 5, 4, 3, 2 et fusionne les résultats avec pondération.
+        """
+        from hdc.representation import encode_context
+        total_scores = {}
+        
+        # On teste les ordres du plus long au plus court
+        for n in [5, 4, 3, 2]:
+            sub_context = context_tokens[-(n-1):] if n > 1 else []
+            if n > 1 and not sub_context: continue
+            
+            q_hv = encode_context(sub_context, dim)
+            results = self.predict_topk(q_hv, k=k)
+            
+            if results:
+                # Pondération : plus l'ordre est haut, plus le poids est fort (n^3)
+                weight_factor = n ** 3
+                for token, count in results:
+                    total_scores[token] = total_scores.get(token, 0) + (count * weight_factor)
+                
+                # Optionnel : si on a un 5-gramme très fort, on peut s'arrêter là (Early Exit)
+                if n == 5 and results[0][1] > 2: # Si on a vu ce 5-gramme plus de 2 fois
+                    break
+
+        if not total_scores:
+            return []
+            
+        # Trier par score total accumulé
+        sorted_final = sorted(total_scores.items(), key=lambda x: x[1], reverse=True)
+        return [t[0] for t in sorted_final[:k]]
+
+    def prune(self, min_count: int = 2):
+        """Supprime les entrées trop rares pour réduire la taille de la DB et le bruit."""
+        # Note: on doit itérer pour vérifier le total_count dans le pickle/JSON
+        # Mais pour simplifier, on peut faire un scan
+        print(f"[*] Elagage de la base (min_count={min_count})...")
+        cursor = self.conn.execute("SELECT key, data FROM storage")
+        to_delete = []
+        for key, data in cursor:
+            entry = pickle.loads(data)
+            total = sum(entry.token_weights.values())
+            if total < min_count:
+                to_delete.append((key,))
+        
+        if to_delete:
+            self.conn.executemany("DELETE FROM storage WHERE key = ?", to_delete)
+            self.conn.commit()
+            print(f"[OK] {len(to_delete)} entrees elaguees.")
+
     def close(self):
-        self.conn.commit()
+        self.commit()
         self.conn.close()

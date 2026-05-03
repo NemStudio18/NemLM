@@ -14,6 +14,10 @@ class V3Engine:
         # Chargement automatique de l'attention si elle existe sur disque
         self.attention.load_from_db(self.memory.conn)
         
+        # Accumulateur de contexte global (HDC-AR)
+        from hdc.representation import ContextAccumulator
+        self.accumulator = ContextAccumulator(dim=dim, decay=0.95)
+        
         self.long_term_hvs: list[np.ndarray] = []
 
     def commit(self):
@@ -31,6 +35,10 @@ class V3Engine:
     def train_step(self, sentence: list[str]):
         if len(sentence) < 2: return
         sent_hv_packed = self.semantic.encode_bow(sentence)
+        
+        # On réinitialise l'accumulateur au début de chaque phrase (ou on le garde pour la session ?)
+        # Pour Europarl, chaque phrase est indépendante, donc on reset.
+        self.accumulator.reset()
 
         for i in range(1, len(sentence)):
             context = sentence[max(0, i - 5):i]
@@ -38,32 +46,53 @@ class V3Engine:
 
             l_hv_packed = encode_context(context, self.dim)
             
-            # Apprentissage Attention Binaire (Fallback)
-            target_hv = self.semantic.get_word_hv(target)
-            self.attention.learn(l_hv_packed, target_hv)
+            # Apprentissage Attention Binaire (Fallback Sémantique)
+            # On utilise le XOR(local, global) pour l'attention
+            global_hv = self.accumulator.get_hv()
+            query_hv = np.bitwise_xor(l_hv_packed, global_hv)
             
-            # Apprentissage Associatif (Exact match)
-            # On stocke le lien local -> target
-            self.memory.learn_one_pass(l_hv_packed, target)
+            target_hv = self.semantic.get_word_hv(target)
+            self.attention.learn(query_hv, target_hv)
+            
+            # Mise à jour de l'accumulateur pour le prochain token
+            self.accumulator.add(target_hv)
+            
+            # Apprentissage Associatif Multi-Échelle (Backoff Option A)
+            for n in [5, 4, 3, 2]:
+                sub_context = sentence[max(0, i - (n-1)):i]
+                if n > 1 and not sub_context: continue
+                
+                n_gram_hv = encode_context(sub_context, self.dim)
+                self.memory.learn_one_pass(n_gram_hv, target)
 
         self.long_term_hvs.append(sent_hv_packed)
         if len(self.long_term_hvs) > 100:
             self.long_term_hvs.pop(0)
 
     def predict_next(self, context_tokens: list[str], top_k: int = 5) -> list[str]:
-        """Orchestre la prediction hybride : Exact Match -> Fallback Attention."""
-        query_hv = encode_context(context_tokens, self.dim)
+        """Orchestre la prediction hybride : HDC-Backoff -> Fallback Attention (Thematique)."""
         
-        # 1. Tentative Match Exact
-        exact_preds = self.memory.predict_topk(query_hv, k=top_k)
+        # 1. Tentative Match Exact avec Backoff (Local uniquement)
+        exact_preds = self.memory.predict_with_backoff(context_tokens, self.dim, k=top_k)
         if exact_preds:
-            return [p[0] for p in exact_preds]
+            # On met à jour l'accumulateur avec le meilleur choix pour maintenir la cohérence
+            best_token = exact_preds[0]
+            target_hv = self.semantic.get_word_hv(best_token)
+            self.accumulator.add(target_hv)
+            return exact_preds
             
-        # 2. Fallback Attention Sémantique (Top-k)
-        # On demande a l'attention de nous sortir un HV consensus
-        attention_hv = self.attention.forward(query_hv, k=8)
+        # 2. Fallback Attention Sémantique (Thematique)
+        from hdc.representation import encode_context
+        l_hv = encode_context(context_tokens, self.dim)
+        g_hv = self.accumulator.get_hv()
+        query_hv = np.bitwise_xor(l_hv, g_hv)
         
-        # On demande a l'index semantique les Top-K mots proches de ce consensus
-        # (On modifie find_nearest pour supporter top_k)
+        attention_hv = self.attention.forward(query_hv, k=8)
         predicted_tokens = self.semantic.find_nearest_topk(attention_hv, k=top_k)
+        
+        if predicted_tokens:
+            # Mise à jour de l'accumulateur
+            best_token = predicted_tokens[0]
+            self.accumulator.add(self.semantic.get_word_hv(best_token))
+            
         return predicted_tokens

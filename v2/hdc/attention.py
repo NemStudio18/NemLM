@@ -1,15 +1,15 @@
 import numpy as np
 from hdc.representation import DIM
 
+# Table de lookup pour le comptage de bits (Popcount)
+POPCOUNT_TABLE = np.array([bin(i).count('1') for i in range(256)], dtype=np.uint8)
+
 def hamming_batch(query_hv, keys_matrix):
-    """Calcule la distance de Hamming entre une requete et une matrice de cles."""
-    # query_hv: (DIM/8,) uint8
-    # keys_matrix: (N, DIM/8) uint8
-    # XOR donne les bits differents
+    """Calcule la distance de Hamming ultra-rapide via table de lookup."""
+    # query_hv: (DIM/8,) uint8, keys_matrix: (N, DIM/8) uint8
     xor_res = np.bitwise_xor(keys_matrix, query_hv)
-    # On compte les bits a 1 (unpackbits est lent, on utilise une table de lookup ou sum)
-    # Version simple et rapide avec NumPy
-    return np.unpackbits(xor_res, axis=1).sum(axis=1)
+    # On utilise la table de lookup sur le dernier axe et on somme
+    return POPCOUNT_TABLE[xor_res].sum(axis=1)
 
 def majority_vote(hvs):
     """Fusionne plusieurs HV par vote majoritaire."""
@@ -30,22 +30,25 @@ class AttentionHead:
         # On pre-alloue pour la vitesse
         self.keys = np.zeros((n_keys, dim // 8), dtype=np.uint8)
         self.values = np.zeros((n_keys, dim // 8), dtype=np.uint8)
+        self.hits = np.zeros(n_keys, dtype=np.uint32) # Compteur d'utilité
         self.ptr = 0
         self.full = False
 
     def learn(self, context_hv, next_token_hv):
-        """Ajoute un souvenir avec remplacement aleatoire si plein."""
+        """Ajoute un souvenir avec remplacement par utilité (Frequence-Weighted)."""
         if not self.full:
             self.keys[self.ptr] = context_hv
             self.values[self.ptr] = next_token_hv
+            self.hits[self.ptr] = 1 # Premier hit à l'insertion
             self.ptr += 1
             if self.ptr >= self.n_keys:
                 self.full = True
         else:
-            # Remplacement aleatoire (Reservoir Sampling simple)
-            idx = np.random.randint(0, self.n_keys)
+            # On remplace le souvenir le MOINS utilisé (Darwinisme HDC)
+            idx = np.argmin(self.hits)
             self.keys[idx] = context_hv
             self.values[idx] = next_token_hv
+            self.hits[idx] = 1 # Reset du compteur pour le nouveau
 
     def attend(self, query_hv, k=8):
         """Cherche les K plus proches et compose la reponse."""
@@ -54,8 +57,11 @@ class AttentionHead:
             return np.zeros(self.dim // 8, dtype=np.uint8)
             
         distances = hamming_batch(query_hv, active_keys)
-        # On prend les indices des K plus petites distances
+        # On prend les indices des K plus proches
         top_k_idx = np.argsort(distances)[:k]
+        
+        # On renforce les hits pour ces souvenirs (ils ont été utiles)
+        self.hits[top_k_idx] += 1
         
         active_values = self.values if self.full else self.values[:self.ptr]
         candidates = [active_values[i] for i in top_k_idx]
@@ -66,6 +72,7 @@ class AttentionHead:
         return {
             "keys": self.keys,
             "values": self.values,
+            "hits": self.hits,
             "ptr": self.ptr,
             "full": self.full
         }
@@ -73,6 +80,7 @@ class AttentionHead:
     def from_dict(self, data):
         self.keys = data["keys"]
         self.values = data["values"]
+        self.hits = data.get("hits", np.zeros(self.n_keys, dtype=np.uint32))
         self.ptr = data["ptr"]
         self.full = data["full"]
 

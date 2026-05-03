@@ -73,8 +73,38 @@ def encode_context(tokens: list[str], dim: int) -> np.ndarray:
         packed_result = np.bitwise_xor(packed_result, hv_pos_packed)
     return packed_result
 
+def encode_context_n(tokens: list[str], n: int, dim: int) -> np.ndarray:
+    """Version raccourcie pour le backoff n-gramme."""
+    return encode_context(tokens[-n:], dim)
+
 def hamming(hv1_packed: np.ndarray, hv2_packed: np.ndarray) -> int:
     """Hamming ultra-rapide sur vecteurs packes."""
     xor_res = np.bitwise_xor(hv1_packed, hv2_packed)
     # unpackbits sur le resultat du XOR donne directement les bits a 1
     return int(np.unpackbits(xor_res).sum())
+
+class ContextAccumulator:
+    def __init__(self, dim: int = DIM, decay: float = 0.95):
+        self.dim = dim
+        self.decay = decay
+        self.weighted_sum = np.zeros(dim, dtype=np.int16)
+        
+    def add(self, token_hv_packed: np.ndarray):
+        """Ajoute un token et applique le decay."""
+        # Déballer le token
+        bits = np.unpackbits(token_hv_packed)[:self.dim].astype(np.int16)
+        bits[bits == 0] = -1
+        
+        # Appliquer le decay sur la somme existante
+        self.weighted_sum = (self.weighted_sum * int(self.decay * 100)) // 100
+        
+        # Ajouter le nouveau token
+        self.weighted_sum += bits
+        
+    def get_hv(self) -> np.ndarray:
+        """Retourne le vecteur consensus actuel (packé)."""
+        bits = (self.weighted_sum > 0).astype(np.uint8)
+        return np.packbits(bits)
+
+    def reset(self):
+        self.weighted_sum.fill(0)

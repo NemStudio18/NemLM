@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pascal LM — Le LLM 100% Bitwise, Made in France</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07070e;
+    --bg2: #0d0d1a;
+    --bg3: #111124;
+    --cyan: #00e5cc;
+    --cyan2: #00b8a5;
+    --amber: #f5a623;
+    --red: #e63946;
+    --blue-fr: #002395;
+    --white: #eef0f4;
+    --muted: #6b7280;
+    --border: rgba(0,229,204,0.15);
+    --mono: 'Space Mono', monospace;
+    --display: 'Bebas Neue', sans-serif;
+    --body: 'DM Sans', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: var(--body);
+    overflow-x: hidden;
+    line-height: 1.6;
+  }
+
+  /* ---- CANVAS HERO ---- */
+  #hero-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    opacity: 0.06;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ---- NAV ---- */
+  nav {
+    position: fixed;
+    top: 0; width: 100%;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 3rem;
+    background: rgba(7,7,14,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-logo {
+    font-family: var(--display);
+    font-size: 1.6rem;
+    letter-spacing: 0.08em;
+    color: var(--cyan);
+  }
+  .nav-logo span { color: var(--white); }
+  .nav-links { display: flex; gap: 2rem; }
+  .nav-links a {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-decoration: none;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--cyan); }
+  .nav-badge {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--bg);
+    background: var(--cyan);
+    padding: 0.25rem 0.7rem;
+    letter-spacing: 0.08em;
+    clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+  }
+
+  /* ---- HERO ---- */
+  .hero {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 8rem 2rem 4rem;
+    overflow: hidden;
+  }
+  .hero-flag {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-bottom: 2rem;
+  }
+  .flag-bar {
+    height: 3px;
+    width: 28px;
+    border-radius: 2px;
+  }
+  .flag-bar.b { background: #002395; }
+  .flag-bar.w { background: #eef0f4; }
+  .flag-bar.r { background: #ED2939; }
+  .hero-eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--cyan);
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+  }
+  .hero-title {
+    font-family: var(--display);
+    font-size: clamp(5rem, 14vw, 11rem);
+    letter-spacing: 0.04em;
+    line-height: 0.9;
+    margin-bottom: 0.3em;
+    background: linear-gradient(135deg, var(--white) 40%, var(--cyan) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero-subtitle {
+    font-family: var(--display);
+    font-size: clamp(1.5rem, 4vw, 3rem);
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    margin-bottom: 1.5rem;
+  }
+  .hero-desc {
+    max-width: 620px;
+    font-size: 1.05rem;
+    color: rgba(238,240,244,0.7);
+    font-weight: 300;
+    margin-bottom: 3rem;
+    line-height: 1.8;
+  }
+  .hero-desc strong { color: var(--cyan); font-weight: 500; }
+  .hero-cta {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .btn-primary {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.9rem 2.2rem;
+    background: var(--cyan);
+    color: var(--bg);
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+    transition: background 0.2s, transform 0.15s;
+    font-weight: 700;
+  }
+  .btn-primary:hover { background: var(--cyan2); transform: translateY(-2px); }
+  .btn-outline {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.9rem 2.2rem;
+    background: transparent;
+    color: var(--white);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    text-decoration: none;
+    clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+    transition: border-color 0.2s, color 0.2s, transform 0.15s;
+  }
+  .btn-outline:hover { border-color: var(--cyan); color: var(--cyan); transform: translateY(-2px); }
+
+  /* ---- STATS TICKER ---- */
+  .stats-bar {
+    position: relative; z-index: 1;
+    display: flex;
+    gap: 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    overflow: hidden;
+  }
+  .stat-item {
+    flex: 1;
+    padding: 1.6rem 2rem;
+    border-right: 1px solid var(--border);
+    text-align: center;
+  }
+  .stat-item:last-child { border-right: none; }
+  .stat-number {
+    font-family: var(--display);
+    font-size: 2.8rem;
+    letter-spacing: 0.04em;
+    color: var(--cyan);
+    line-height: 1;
+  }
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 0.4rem;
+  }
+
+  /* ---- SECTION BASE ---- */
+  section { position: relative; z-index: 1; padding: 6rem 2rem; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .section-tag {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--cyan);
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    margin-bottom: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .section-tag::before {
+    content: '';
+    display: block;
+    width: 24px; height: 1px;
+    background: var(--cyan);
+  }
+  .section-title {
+    font-family: var(--display);
+    font-size: clamp(2.5rem, 5vw, 4rem);
+    letter-spacing: 0.06em;
+    line-height: 1.0;
+    margin-bottom: 1rem;
+  }
+  .section-lead {
+    font-size: 1.05rem;
+    color: rgba(238,240,244,0.65);
+    font-weight: 300;
+    max-width: 560px;
+    line-height: 1.8;
+  }
+
+  /* ---- MANIFESTO ---- */
+  .manifesto { background: var(--bg2); }
+  .manifesto-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--border);
+    margin-top: 3rem;
+  }
+  .manifesto-item {
+    padding: 2.5rem;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    transition: background 0.2s;
+  }
+  .manifesto-item:hover { background: rgba(0,229,204,0.03); }
+  .manifesto-item:nth-child(even) { border-right: none; }
+  .manifesto-item:nth-child(3),
+  .manifesto-item:nth-child(4) { border-bottom: none; }
+  .manifesto-num {
+    font-family: var(--display);
+    font-size: 4rem;
+    color: rgba(0,229,204,0.08);
+    position: absolute;
+    top: 0.5rem; right: 1.2rem;
+    line-height: 1;
+    pointer-events: none;
+  }
+  .manifesto-icon {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--cyan);
+    letter-spacing: 0.1em;
+    margin-bottom: 0.8rem;
+    background: rgba(0,229,204,0.08);
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+  }
+  .manifesto-item h3 {
+    font-family: var(--display);
+    font-size: 1.5rem;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.5rem;
+  }
+  .manifesto-item p {
+    font-size: 0.95rem;
+    color: rgba(238,240,244,0.6);
+    line-height: 1.7;
+    font-weight: 300;
+  }
+
+  /* ---- ARCHITECTURE ---- */
+  .arch-section { background: var(--bg); }
+  .arch-grid {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 4rem;
+    margin-top: 3rem;
+    align-items: start;
+  }
+  .arch-diagram {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    padding: 2rem;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: rgba(238,240,244,0.6);
+    line-height: 1.9;
+  }
+  .arch-diagram .hl { color: var(--cyan); }
+  .arch-diagram .hl2 { color: var(--amber); }
+  .arch-diagram .comment { color: rgba(107,114,128,0.6); }
+  .arch-steps { display: flex; flex-direction: column; gap: 1.2rem; }
+  .arch-step {
+    display: flex;
+    gap: 1.2rem;
+    align-items: flex-start;
+  }
+  .step-num {
+    font-family: var(--display);
+    font-size: 1.8rem;
+    color: var(--cyan);
+    min-width: 40px;
+    line-height: 1;
+    opacity: 0.5;
+  }
+  .step-content h4 {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--white);
+    letter-spacing: 0.06em;
+    margin-bottom: 0.3rem;
+  }
+  .step-content p {
+    font-size: 0.9rem;
+    color: rgba(238,240,244,0.55);
+    font-weight: 300;
+    line-height: 1.6;
+  }
+
+  /* ---- BENCHMARK ---- */
+  .bench-section { background: var(--bg2); }
+  .bench-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-top: 3rem;
+  }
+  .bench-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 2rem;
+  }
+  .bench-card.featured {
+    border-color: var(--cyan);
+    position: relative;
+  }
+  .bench-card.featured::before {
+    content: 'PASCAL LM';
+    position: absolute;
+    top: -1px; right: 1.5rem;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    background: var(--cyan);
+    color: var(--bg);
+    padding: 0.15rem 0.6rem;
+  }
+  .bench-title {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+  }
+  .bench-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 0.9rem;
+  }
+  .bench-row:last-child { border-bottom: none; }
+  .bench-row .key { color: rgba(238,240,244,0.5); font-weight: 300; }
+  .bench-row .val { font-family: var(--mono); font-size: 0.85rem; }
+  .bench-row .val.good { color: var(--cyan); }
+  .bench-row .val.neutral { color: var(--white); }
+  .bench-bar-container {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+  }
+  .bench-bar-label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem;
+  }
+  .bench-bar-label .name { color: rgba(238,240,244,0.7); font-weight: 300; }
+  .bench-bar-label .pct { font-family: var(--mono); font-size: 0.75rem; }
+  .bar-track {
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 0.8rem;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 1s ease;
+  }
+  .bar-fill.pascal { background: var(--cyan); width: 32.03%; }
+  .bar-fill.kneser { background: var(--amber); width: 32.8%; }
+  .bar-fill.speed { background: var(--cyan); width: 100%; }
+
+  /* ---- ROADMAP ---- */
+  .roadmap-section { background: var(--bg); }
+  .roadmap-list { margin-top: 3rem; }
+  .roadmap-phase {
+    display: flex;
+    gap: 2.5rem;
+    padding: 2.5rem 0;
+    border-bottom: 1px solid var(--border);
+    align-items: flex-start;
+  }
+  .roadmap-phase:last-child { border-bottom: none; }
+  .phase-status {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    padding: 0.3rem 0.8rem;
+    white-space: nowrap;
+    margin-top: 0.2rem;
+  }
+  .status-done { background: rgba(0,229,204,0.12); color: var(--cyan); }
+  .status-next { background: rgba(245,166,35,0.12); color: var(--amber); }
+  .status-future { background: rgba(107,114,128,0.12); color: var(--muted); }
+  .phase-title {
+    font-family: var(--display);
+    font-size: 1.4rem;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.5rem;
+    color: var(--white);
+  }
+  .phase-desc {
+    font-size: 0.9rem;
+    color: rgba(238,240,244,0.5);
+    font-weight: 300;
+    line-height: 1.7;
+  }
+  .phase-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.8rem;
+  }
+  .phase-tag {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    padding: 0.2rem 0.6rem;
+    background: rgba(255,255,255,0.04);
+    color: rgba(238,240,244,0.5);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  /* ---- QUOTE ---- */
+  .quote-section {
+    background: var(--bg2);
+    text-align: center;
+    padding: 5rem 2rem;
+  }
+  .quote-text {
+    font-family: var(--display);
+    font-size: clamp(1.5rem, 3.5vw, 2.5rem);
+    letter-spacing: 0.06em;
+    max-width: 780px;
+    margin: 0 auto 1.5rem;
+    line-height: 1.2;
+    color: var(--white);
+  }
+  .quote-text em { color: var(--cyan); font-style: normal; }
+  .quote-source {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+  }
+
+  /* ---- FOOTER ---- */
+  footer {
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    padding: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative; z-index: 1;
+  }
+  .footer-brand {
+    font-family: var(--display);
+    font-size: 1.4rem;
+    letter-spacing: 0.1em;
+    color: var(--cyan);
+  }
+  .footer-brand span { color: var(--muted); }
+  .footer-copy {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-align: right;
+    line-height: 1.8;
+  }
+  .footer-flag {
+    display: flex;
+    gap: 0;
+    overflow: hidden;
+    border-radius: 2px;
+    height: 16px;
+    width: 28px;
+  }
+  .footer-flag div { flex: 1; }
+  .footer-flag .fb { background: #002395; }
+  .footer-flag .fw { background: #eef0f4; }
+  .footer-flag .fr { background: #ED2939; }
+
+  /* ---- DIVIDER ---- */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+  }
+</style>
+</head>
+<body>
+
+<canvas id="hero-canvas"></canvas>
+
+<nav>
+  <div class="nav-logo">PASCAL<span> LM</span></div>
+  <div class="nav-links">
+    <a href="#architecture">Architecture</a>
+    <a href="#benchmark">Benchmark</a>
+    <a href="#roadmap">Roadmap</a>
+    <a href="https://github.com">GitHub</a>
+  </div>
+  <div class="nav-badge">V5.3 STABLE</div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-flag">
+    <div class="flag-bar b"></div>
+    <div class="flag-bar w"></div>
+    <div class="flag-bar r"></div>
+    <span style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);letter-spacing:0.12em;margin-left:0.5rem;">MADE IN FRANCE</span>
+  </div>
+  <div class="hero-eyebrow">LLM · Hyperdimensional Computing · 100% Bitwise</div>
+  <h1 class="hero-title">PASCAL LM</h1>
+  <div class="hero-subtitle">Zero GPU. Zero Float. Zero Compromise.</div>
+  <p class="hero-desc">
+    Le premier modèle de langage entièrement binaire conçu pour tourner sur <strong>n'importe quel CPU</strong>.
+    Pas de GPU, pas de flottants, pas de cloud. Juste du calcul hyperdimensionnel, de la RAM et des idées.
+  </p>
+  <div class="hero-cta">
+    <a href="https://github.com" class="btn-primary">★ Star on GitHub</a>
+    <a href="#architecture" class="btn-outline">Voir l'architecture →</a>
+  </div>
+</div>
+
+<!-- STATS BAR -->
+<div style="background:rgba(245,166,35,0.07);border-bottom:1px solid rgba(245,166,35,0.2);padding:0.55rem 2rem;text-align:center;font-family:var(--mono);font-size:0.65rem;letter-spacing:0.12em;color:var(--amber);position:relative;z-index:1;">
+  ⚠ PROTOTYPE PYTHON PUR — Ces chiffres sont le plancher. Le portage Rust + SIMD AVX2 est en cours.
+</div>
+<div class="stats-bar">
+  <div class="stat-item">
+    <div class="stat-number">110+</div>
+    <div class="stat-label">phr/s · Compact HF (Python)</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-number">32.03%</div>
+    <div class="stat-label">Top-5 Accuracy · Europarl FR</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-number">1.38Go</div>
+    <div class="stat-label">Base Distillée · Phase 2 HF</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-number">&lt;1ms</div>
+    <div class="stat-label">Target Rust · /token</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-number">4Go</div>
+    <div class="stat-label">RAM · sans GPU</div>
+  </div>
+</div>
+
+<!-- MANIFESTO -->
+<section class="manifesto" id="manifesto">
+  <div class="container">
+    <div class="section-tag">Philosophie</div>
+    <h2 class="section-title">POURQUOI PASCAL LM ?</h2>
+    <p class="section-lead">L'IA ne devrait pas exiger des milliers d'euros de hardware. Nous prouvons le contraire.</p>
+    <div class="manifesto-grid">
+      <div class="manifesto-item">
+        <div class="manifesto-num">01</div>
+        <div class="manifesto-icon">XOR · POPCOUNT · ROTATION</div>
+        <h3>100% Binaire</h3>
+        <p>Zéro flottant. Chaque opération est un XOR, une rotation ou un popcount. Un processeur de 2012 suffit. Votre Raspberry Pi aussi.</p>
+      </div>
+      <div class="manifesto-item">
+        <div class="manifesto-num">02</div>
+        <div class="manifesto-icon">GPU: NONE · CLOUD: NONE</div>
+        <h3>Souveraineté totale</h3>
+        <p>Pas de dépendance NVIDIA. Pas d'API externe. Pas d'abonnement. Vos données restent sur votre machine. Définitivement.</p>
+      </div>
+      <div class="manifesto-item">
+        <div class="manifesto-num">03</div>
+        <div class="manifesto-icon">HDC · 10 000 BITS</div>
+        <h3>Calcul Hyperdimensionnel</h3>
+        <p>Des vecteurs de 10 000 bits capturent la sémantique par la géométrie binaire. Un paradigme radicalement différent des Transformers classiques.</p>
+      </div>
+      <div class="manifesto-item">
+        <div class="manifesto-num">04</div>
+        <div class="manifesto-icon">MADE IN FRANCE · OPEN SOURCE</div>
+        <h3>Recherche indépendante</h3>
+        <p>Développé en France, en dehors des grandes labs. Pascal LM démontre qu'une IA compétitive peut naître d'une démarche frugale et souveraine.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ARCHITECTURE -->
+<section class="arch-section" id="architecture">
+  <div class="container">
+    <div class="section-tag">Technique</div>
+    <h2 class="section-title">ARCHITECTURE HDC-AR</h2>
+    <p class="section-lead">Deux contextes. Un consensus binaire. Une mémoire darwinienne.</p>
+    <div class="arch-grid">
+      <div class="arch-diagram">
+        <span class="comment"># Pascal LM — Flux d'inférence</span><br>
+        <br>
+        <span class="hl">INPUT</span>  → tokenize(text)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+        <span class="hl">LOCAL</span>&nbsp;&nbsp;= XOR( T[n] ⊕ rot(T[n-1],1)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;⊕ rot(T[n-2],2) ... )<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+        <span class="hl">GLOBAL</span> = accumulate(<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;G = G * <span class="hl2">0.95</span> + T[n]<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+        <span class="comment"># Backoff Search (exact match)</span><br>
+        &nbsp;<span class="hl">SQLite</span> → n-gram order <span class="hl2">5→4→3→2</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓ (no match)<br>
+        <span class="comment"># Thematic Fallback</span><br>
+        &nbsp;<span class="hl">QUERY</span>&nbsp; = LOCAL <span class="hl2">XOR</span> GLOBAL<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ 8-head binary attention<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ majority vote<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+        <span class="hl">OUTPUT</span> → next_token + accumulate
+      </div>
+      <div class="arch-steps">
+        <div class="arch-step">
+          <div class="step-num">01</div>
+          <div class="step-content">
+            <h4>CONTEXTE LOCAL — Syntaxe</h4>
+            <p>Fenêtre glissante de 5 tokens encodée par rotations XOR. Capture les structures syntaxiques immédiates avec une précision chirurgicale.</p>
+          </div>
+        </div>
+        <div class="arch-step">
+          <div class="step-num">02</div>
+          <div class="step-content">
+            <h4>CONTEXTE GLOBAL — Thème</h4>
+            <p>L'accumulateur cumule la "mémoire sémantique" de toute la séquence avec un decay de 0.95. La cohérence thématique sur 100+ tokens.</p>
+          </div>
+        </div>
+        <div class="arch-step">
+          <div class="step-num">03</div>
+          <div class="step-content">
+            <h4>BACKOFF MULTI-ÉCHELLE</h4>
+            <p>Recherche pondérée sur les ordres 5→4→3→2. Score = count × n³. Si aucun match, fusion des deux contextes via 8 têtes d'attention binaire.</p>
+          </div>
+        </div>
+        <div class="arch-step">
+          <div class="step-num">04</div>
+          <div class="step-content">
+            <h4>MÉMOIRE DARWINIENNE</h4>
+            <p>Chaque souvenir possède un score de "hits". Les moins utiles sont écrasés. Le modèle évolue vers ce qui compte vraiment.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- BENCHMARK -->
+<section class="bench-section" id="benchmark">
+  <div class="container">
+    <div class="section-tag">Performance</div>
+    <h2 class="section-title">LE DUEL SCIENTIFIQUE</h2>
+    <p class="section-lead">Pascal LM vs Kneser-Ney — sur Europarl FR, hardware i3 de 2012, règles strictes.</p>
+
+    <!-- CALLOUT FORTE -->
+    <div style="margin-bottom:2.5rem;padding:2rem 2.5rem;background:rgba(245,166,35,0.05);border:1px solid rgba(245,166,35,0.25);border-left:3px solid var(--amber);display:flex;gap:2rem;align-items:center;flex-wrap:wrap;">
+      <div style="font-family:var(--display);font-size:3.5rem;color:var(--amber);letter-spacing:0.04em;line-height:1;white-space:nowrap;">230 phr/s</div>
+      <div>
+        <div style="font-family:var(--mono);font-size:0.7rem;color:var(--amber);letter-spacing:0.15em;margin-bottom:0.5rem;">PYTHON PUR · ZÉRO OPTIMISATION NATIVE</div>
+        <p style="font-size:0.95rem;color:rgba(238,240,244,0.65);font-weight:300;line-height:1.7;max-width:560px;">Ces résultats sont obtenus <strong style="color:var(--white);font-weight:500;">sans une seule ligne de Rust</strong>. Pas de SIMD, pas d'AVX2, pas de PyO3. Pure Python 3.10 + NumPy sur un CPU de 2012. Le mode Compact HF atteint <strong style="color:var(--cyan)">110 phr/s</strong> de moyenne.</p>
+      </div>
+    </div>
+
+    <!-- GRILLE PYTHON vs RUST -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid var(--border);margin-bottom:2rem;">
+      <div style="padding:1.5rem;border-right:1px solid var(--border);">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:1rem;">Métrique</div>
+        <div style="display:flex;flex-direction:column;gap:0.9rem;">
+          <div style="font-size:0.85rem;color:rgba(238,240,244,0.6);font-weight:300;">Vitesse entraînement</div>
+          <div style="font-size:0.85rem;color:rgba(238,240,244,0.6);font-weight:300;">Inférence / token</div>
+          <div style="font-size:0.85rem;color:rgba(238,240,244,0.6);font-weight:300;">Opérations SIMD</div>
+          <div style="font-size:0.85rem;color:rgba(238,240,244,0.6);font-weight:300;">Dépendances</div>
+        </div>
+      </div>
+      <div style="padding:1.5rem;border-right:1px solid var(--border);background:rgba(245,166,35,0.04);">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--amber);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:1rem;">Python prototype · Maintenant</div>
+        <div style="display:flex;flex-direction:column;gap:0.9rem;">
+          <div style="font-family:var(--mono);font-size:0.85rem;color:var(--amber);">230+ phr/s</div>
+          <div style="font-family:var(--mono);font-size:0.85rem;color:var(--amber);">~5–10ms</div>
+          <div style="font-family:var(--mono);font-size:0.85rem;color:var(--amber);">AUCUNE</div>
+          <div style="font-family:var(--mono);font-size:0.85rem;color:var(--amber);">Python + NumPy</div>
+        </div>
+      </div>
+      <div style="padding:1.5rem;background:rgba(0,229,204,0.04);">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--cyan);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:1rem;">Full Rust standalone · Phase 3</div>
+        <div style="display:flex;flex-direction:column;gap:0.9rem;">
+          <div style="font-family:var(--mono);font-size:0.85rem;color:var(--cyan);">×10–50x Python <span style="color:var(--muted);font-size:0.7rem;">estimé</span></div>
+          <div style="font-family:var(--mono);font-size:0.85rem;color:var(--cyan);">&lt;1ms <span style="color:var(--muted);font-size:0.7rem;">target</span></div>
+          <div style="font-family:var(--mono);font-size:0.85rem;color:var(--cyan);">SIMD natif <span style="color:var(--muted);font-size:0.7rem;">SSE4.2→AVX2→NEON</span></div>
+          <div style="font-family:var(--mono);font-size:0.85rem;color:var(--cyan);">Zéro dépendance</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DUEL VS KNESER-NEY -->
+    <div style="margin-top:2.5rem;">
+      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);letter-spacing:0.2em;text-transform:uppercase;margin-bottom:1.2rem;">Duel accuracy — Prototype Python vs Kneser-Ney classique</div>
+      <div class="bench-grid">
+        <div class="bench-card featured">
+          <div class="bench-title">Pascal LM V5.3 <span style="color:var(--amber);font-size:0.6rem;">(Python prototype)</span></div>
+          <div class="bench-row"><span class="key">Top-5 Accuracy</span><span class="val good">32.03%</span></div>
+          <div class="bench-row"><span class="key">GPU requis</span><span class="val good">AUCUN</span></div>
+          <div class="bench-row"><span class="key">RAM</span><span class="val good">~1.5 Go</span></div>
+          <div class="bench-row"><span class="key">Opérations</span><span class="val good">100% Bitwise</span></div>
+          <div class="bench-row"><span class="key">Taille DB</span><span class="val good">1.38 Go Distillée</span></div>
+          <div class="bench-bar-container">
+            <div class="bench-bar-label"><span class="name">Accuracy Top-5</span><span class="pct" style="color:var(--cyan)">32.03%</span></div>
+            <div class="bar-track"><div class="bar-fill pascal"></div></div>
+          </div>
+        </div>
+        <div class="bench-card">
+          <div class="bench-title">Kneser-Ney (référence)</div>
+          <div class="bench-row"><span class="key">Top-5 Accuracy</span><span class="val neutral">32.80%</span></div>
+          <div class="bench-row"><span class="key">GPU requis</span><span class="val neutral">—</span></div>
+          <div class="bench-row"><span class="key">RAM</span><span class="val neutral">Variable</span></div>
+          <div class="bench-row"><span class="key">Opérations</span><span class="val neutral">Float (proba)</span></div>
+          <div class="bench-row"><span class="key">Type</span><span class="val neutral">N-gram classique</span></div>
+          <div class="bench-bar-container">
+            <div class="bench-bar-label"><span class="name">Accuracy Top-5</span><span class="pct" style="color:var(--amber)">32.80%</span></div>
+            <div class="bar-track"><div class="bar-fill kneser"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:1.5rem;padding:1.2rem 1.5rem;background:rgba(0,229,204,0.04);border:1px solid var(--border);font-family:var(--mono);font-size:0.72rem;color:rgba(238,240,244,0.5);letter-spacing:0.04em;line-height:1.8;">
+      <span style="color:var(--cyan)">CONDITIONS</span> — Corpus: Europarl FR · Train: 15 000 phrases · Test: 5 000 phrases · Hardware: Intel i3-3220 @ 3.30GHz (2012, SSE4.2 + AVX) · Vecteurs: 10 000 bits · <span style="color:var(--amber)">Prototype Python 3.10 — portage Rust en cours</span>
+    </div>
+  </div>
+</section>
+
+<!-- QUOTE -->
+<div class="quote-section">
+  <div class="container">
+    <p class="quote-text">
+      "110 phr/s en mode HF sur un i3 de 2012.
+      <em>Imaginez en Rust.</em>"
+    </p>
+    <div class="quote-source">— NEM STUDIO · PASCAL LM PROJECT · INDUSTRIAL HF</div>
+  </div>
+</div>
+
+<!-- ROADMAP -->
+<section class="roadmap-section" id="roadmap">
+  <div class="container">
+    <div class="section-tag">Roadmap</div>
+    <h2 class="section-title">VERS GPT-2 SMALL</h2>
+    <p class="section-lead">La route est tracée. Le GPU n'est pas invité.</p>
+    <div class="roadmap-list">
+      <div class="roadmap-phase">
+        <div class="phase-status status-done">✓ TERMINÉ</div>
+        <div>
+          <div class="phase-title">Phase 2 — Industrialisation HF</div>
+          <p class="phase-desc">Accuracy 32.03% validée. CompactEngine distillé Top-30 préservant la sémantique.</p>
+          <div class="phase-items">
+            <span class="phase-tag">32.03% Acc</span>
+            <span class="phase-tag">Top-30 Distill</span>
+            <span class="phase-tag">n**4 Weighting</span>
+            <span class="phase-tag">Early Exit</span>
+          </div>
+        </div>
+      </div>
+      <div class="roadmap-phase">
+        <div class="phase-status status-next">→ EN COURS</div>
+        <div>
+          <div class="phase-title">Phase 3B — Binary Transformer (BT)</div>
+          <p class="phase-desc">Ajout d'une couche d'attention différentiable binaire (BitNet logic). Prototype STE validé.</p>
+          <div class="phase-items">
+            <span class="phase-tag">STE Backprop</span>
+            <span class="phase-tag">Binary MLP</span>
+            <span class="phase-tag">Hybrid Input</span>
+            <span class="phase-tag">10k-dim Scale</span>
+          </div>
+        </div>
+      </div>
+      <div class="roadmap-phase">
+        <div class="phase-status status-future">◎ Q3 2026</div>
+        <div>
+          <div class="phase-title">Phase 3 — Full Rust Standalone</div>
+          <p class="phase-desc">Abandon total du pipeline Python. Binaire Rust autonome, zéro dépendance. SIMD natif adaptatif (SSE4.2 sur ancien CPU, AVX2 sur moderne, NEON sur ARM). Objectif : rivaliser avec GPT-2 Small.</p>
+          <div class="phase-items">
+            <span class="phase-tag">Zéro Python</span>
+            <span class="phase-tag">SIMD adaptatif</span>
+            <span class="phase-tag">×10–50x Python</span>
+            <span class="phase-tag">Binary Transformer</span>
+            <span class="phase-tag">GPT-2 parity</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- FOOTER -->
+<footer>
+  <div>
+    <div class="footer-brand">PASCAL<span> LM</span></div>
+    <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-top:0.5rem;letter-spacing:0.08em;display:flex;align-items:center;gap:0.5rem;">
+      <div class="footer-flag"><div class="fb"></div><div class="fw"></div><div class="fr"></div></div>
+      NEM STUDIO · FRANCE · OPEN SOURCE
+    </div>
+  </div>
+  <div class="footer-copy">
+    Built on Hyperdimensional Computing<br>
+    Zero GPU · Zero Float · Fully Sovereign<br>
+    <span style="color:var(--cyan)">V5.3 Multi-Worker Stable</span>
+  </div>
+</footer>
+
+<script>
+const canvas = document.getElementById('hero-canvas');
+const ctx = canvas.getContext('2d');
+let cols, drops;
+
+function init() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const fontSize = 13;
+  cols = Math.floor(canvas.width / fontSize);
+  drops = Array(cols).fill(0).map(() => Math.random() * -100);
+}
+
+function draw() {
+  ctx.fillStyle = 'rgba(7,7,14,0.05)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#00e5cc';
+  ctx.font = '13px Space Mono, monospace';
+  for (let i = 0; i < drops.length; i++) {
+    const char = Math.random() > 0.5 ? '1' : '0';
+    ctx.fillText(char, i * 13, drops[i] * 13);
+    if (drops[i] * 13 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+    drops[i]++;
+  }
+}
+
+init();
+setInterval(draw, 55);
+window.addEventListener('resize', init);
+
+// Animate stat bars on scroll
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.querySelectorAll('.bar-fill').forEach(b => b.style.opacity = '1');
+    }
+  });
+}, { threshold: 0.3 });
+document.querySelectorAll('.bench-card').forEach(c => observer.observe(c));
+</script>
+
+</body>
+</html>

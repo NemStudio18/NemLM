@@ -10,7 +10,8 @@ from typing import Iterator
 
 def tokenize(text: str) -> list[str]:
     text = text.lower().strip()
-    text = re.sub(r"[^a-z\s]", " ", text) # text8 ne contient que a-z
+    # Support des accents francais
+    text = re.sub(r"[^a-zàâçéèêëîïôûùÿæœ\s]", " ", text)
     return [t for t in text.split() if t]
 
 def load(path: str, max_tokens: int = None) -> list[list[str]]:

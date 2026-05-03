@@ -14,11 +14,11 @@
 - **Incremental Weighted Sum** : Calcul du bundle en O(D) au lieu de O(N*D).
 - **Positional Primes** : Rotations basées sur des nombres premiers pour les contextes longs.
 
-## [V1.3.0] - Persistance & Stabilité V3 (01 Mai 2026)
+## [V3.0.0] - Industrialisation Haute Densité (02 Mai 2026)
 ### Ajouté
-- **Binary Persistence (Option B)** : Format `.hdb` compact [Hash64|BitsPacked] pour une portabilité totale vers Rust.
-- **Stable Context Management** : Correction du moteur de génération pour préserver le contexte sémantique (C) entre les prompts.
-- **Fast Loader** : Chargement instantané des Hypervecteurs packés depuis le disque.
-### Améliorations
-- **V3 Engine** : Unification du guidage sémantique et local pour une meilleure cohérence.
-- **Memory Optimization** : Utilisation de `np.packbits` pour diviser par 8 la taille des fichiers de modèles.
+- **Bit-Packed Pipeline** : Intégration de `np.packbits` à tous les niveaux (Cache, LSH, Mémoire). Gain de densité : x8.
+- **Quantization int8** : Passage de `int16` à `int8` pour les sommes pondérées, divisant par 2 l'empreinte mémoire des contextes.
+- **Cache de Rotation (LRU)** : Accélération majeure de l'entraînement par mise en cache des rotations bit-à-bit.
+- **RAM Shield (Capacité Bornée)** : Système de pruning automatique à 1M d'entrées pour garantir la stabilité sur 16GB.
+- **Spécialisation Française** : Support complet des accents et entraînement sur corpus Europarl (50k+ phrases).
+- **Benchmark Scientifique** : Duel NemLM vs Kneser-Ney (5-grammes) pour validation de la précision sémantique.

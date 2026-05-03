@@ -1,144 +1,132 @@
 """
-HDC Memory Layer V2 (Optimisée)
-- Majority Bundling incremental.
-- Passive-Aggressive Binary Perceptron.
-- Weighted Sum vector maintenu en temps réel pour O(D) bundling.
+HDC Associative Memory Layer V3 (Persistent & Bit-Packed)
+Support pour le stockage sur disque via BTree (SQLite) pour gérer des millions de contextes sur 16GB.
 """
-
 import numpy as np
-from .representation import encode_context, encode_token, hamming
-from .lsh import LSHIndex
-from .persistence import save_memory, load_memory
+import sqlite3
+import pickle
+import os
+from functools import lru_cache
 
 class MemoryEntry:
     def __init__(self, dim: int):
-        self.weighted_sum = np.zeros(dim, dtype=np.int32)
-        self.bundle_cache = None
-        self.token_weights = {} # token -> weight
+        self.dim = dim
+        self.weighted_sum = np.zeros(dim, dtype=np.int16) # int16 pour éviter l'overflow pendant l'apprentissage
+        self.token_weights = {}
+        self.bundle_cache = None # Packed version
 
-    def update(self, token: str, dim: int, delta: int):
-        if delta == 0: return
-        token_hv = encode_token(token, dim)
-        influence = (token_hv.astype(np.int32) * 2 - 1) * delta
-        self.weighted_sum += influence
-        self.token_weights[token] = self.token_weights.get(token, 0) + delta
-        self.bundle_cache = None
+    def update(self, token_hv: np.ndarray, weight: int = 1, token_name: str = None):
+        # On travaille sur les bits déballés pour l'accumulation
+        unpacked = np.unpackbits(token_hv)
+        unpacked = unpacked.astype(np.int16)
+        unpacked[unpacked == 0] = -1
+        
+        self.weighted_sum += unpacked * weight
+        if token_name:
+            self.token_weights[token_name] = self.token_weights.get(token_name, 0) + weight
+        self.bundle_cache = None # Invalider le cache
 
-    def merge(self, other: 'MemoryEntry'):
-        """Fusionne les poids d'une autre entrée (Somme vectorielle)."""
-        self.weighted_sum += other.weighted_sum
-        for token, weight in other.token_weights.items():
-            self.token_weights[token] = self.token_weights.get(token, 0) + weight
-        self.bundle_cache = None
+    def get_bundle(self) -> np.ndarray:
+        if self.bundle_cache is None:
+            # Vote majoritaire : >0 devient 1, <=0 devient 0
+            bits = (self.weighted_sum > 0).astype(np.uint8)
+            self.bundle_cache = np.packbits(bits)
+        return self.bundle_cache
 
 class AssociativeMemory:
-    def __init__(self, dim: int, use_lsh: bool = True):
+    def __init__(self, dim: int, db_path: str = "memory.nemdb", use_lsh: bool = True, max_ram_entries: int = 100000):
         self.dim = dim
+        self.db_path = db_path
         self.use_lsh = use_lsh
-        self.storage: dict[int, MemoryEntry] = {}
-        self._lsh = None
-        self._vocab_list = []
-        self._vocab_matrix = None
+        self.max_ram_entries = max_ram_entries
+        
+        # Initialisation DB
+        self.conn = sqlite3.connect(db_path)
+        self.conn.execute("PRAGMA journal_mode = WAL")
+        self.conn.execute("PRAGMA synchronous = NORMAL")
+        # Mode Turbo D: SSD - On autorise SQLite a mapper 2Go et un gros cache
+        self.conn.execute("PRAGMA mmap_size = 2147483648") 
+        self.conn.execute("PRAGMA cache_size = -2000000") # 2Go de cache de pages
+        self.conn.execute("CREATE TABLE IF NOT EXISTS storage (key BLOB PRIMARY KEY, data BLOB)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_key ON storage(key)")
+        
+        # Cache RAM pour la vitesse (LRU)
+        self.ram_cache = {}
+        self.write_buffer = {} # Clés modifiées à synchroniser
 
-    def _hv_key(self, hv: np.ndarray) -> int:
-        packed = np.packbits(hv)
-        return hash(packed.tobytes()) & 0xFFFFFFFFFFFFFFFF
+    def _hv_key(self, hv_packed: np.ndarray) -> bytes:
+        return hv_packed.tobytes()
 
-    def learn_one_pass(self, context, next_token: str):
-        """Phase 1 : Accumulation. context peut être une liste de tokens ou un HV."""
-        if isinstance(context, list):
-            ctx_hv = encode_context(context, self.dim)
-        else:
-            ctx_hv = context
-            
-        key = self._hv_key(ctx_hv)
-        if key not in self.storage:
-            self.storage[key] = MemoryEntry(self.dim)
-        self.storage[key].update(next_token, self.dim, 1)
+    def get_entry(self, hv_packed: np.ndarray) -> MemoryEntry:
+        key = self._hv_key(hv_packed)
+        
+        # 1. Check Write Buffer (données les plus fraîches)
+        if key in self.write_buffer:
+            return self.write_buffer[key]
 
-    def get_bundle(self, key: int) -> np.ndarray:
-        entry = self.storage[key]
-        if entry.bundle_cache is not None:
-            return entry.bundle_cache
-        bundle = (entry.weighted_sum > 0).astype(np.uint8)
-        entry.bundle_cache = bundle
-        return bundle
+        # 2. Check RAM Cache
+        if key in self.ram_cache:
+            return self.ram_cache[key]
+        
+        # 3. Check Disk
+        cursor = self.conn.execute("SELECT data FROM storage WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        if row:
+            entry = pickle.loads(row[0])
+            self._update_ram_cache(key, entry)
+            return entry
+        
+        # 4. Create New
+        entry = MemoryEntry(self.dim)
+        return entry
 
-    def update_passive_aggressive(self, context, true_token: str, predicted_token: str = None, margin: int = 500):
-        """Ajustement PA. context peut être une liste de tokens ou un HV."""
-        if isinstance(context, list):
-            ctx_hv = encode_context(context, self.dim)
-        else:
-            ctx_hv = context
-            
-        key = self._hv_key(ctx_hv)
-        entry = self.storage.get(key)
-        if not entry: 
-            # Si le contexte n'existe pas encore, on l'initialise
-            self.learn_one_pass(ctx_hv, true_token)
+    def _update_ram_cache(self, key: bytes, entry: MemoryEntry):
+        if len(self.ram_cache) >= self.max_ram_entries:
+            self.ram_cache.clear()
+        self.ram_cache[key] = entry
+
+    def save_entry(self, hv_packed: np.ndarray, entry: MemoryEntry):
+        key = self._hv_key(hv_packed)
+        self.write_buffer[key] = entry
+        
+        # Si le buffer devient trop gros, on commit
+        if len(self.write_buffer) >= 1000:
+            self.commit()
+
+    def commit(self):
+        if not self.write_buffer:
+            self.conn.commit()
             return
-
-        bundle = self.get_bundle(key)
-        dist_true = hamming(bundle, encode_token(true_token, self.dim))
-        dist_pred = hamming(bundle, encode_token(predicted_token, self.dim)) if predicted_token else self.dim
-        
-        if dist_true > dist_pred - margin:
-            delta = 2
-            entry.update(true_token, self.dim, delta)
-            if predicted_token:
-                entry.update(predicted_token, self.dim, -delta // 2)
-
-    def build_lsh(self, vocabulary: list[str], num_tables: int = 10, num_bits: int = 16):
-        self._vocab_list = vocabulary
-        self._lsh = LSHIndex(self.dim, num_tables=num_tables, num_bits=num_bits)
-        self._lsh.build(vocabulary, lambda t: encode_token(t, self.dim))
-
-    def predict_topk(self, context, vocabulary: list[str] = None, k: int = 5) -> list[str]:
-        """Retourne les k tokens les plus probables."""
-        if isinstance(context, list):
-            ctx_hv = encode_context(context, self.dim)
-        else:
-            ctx_hv = context
             
-        key = self._hv_key(ctx_hv)
-        bundle = self.get_bundle(key) if key in self.storage else ctx_hv
-            
-        if self.use_lsh and self._lsh:
-            res = self._lsh.query(bundle, k=k)
-            return [r[0] for r in res]
+        # Écriture groupée
+        items = [(k, pickle.dumps(v)) for k, v in self.write_buffer.items()]
+        self.conn.executemany("INSERT OR REPLACE INTO storage (key, data) VALUES (?, ?)", items)
+        self.conn.commit()
         
-        if self._vocab_matrix is None or len(self._vocab_list) != len(vocabulary):
-            self._vocab_list = vocabulary
-            # On stocke la matrice en format signe (-1, 1) pour np.dot
-            self._vocab_matrix = (np.stack([encode_token(t, self.dim) for t in vocabulary]).astype(np.int8) * 2 - 1)
-            
-        # Distance de Hamming via produit matriciel (tres rapide)
-        # Dist = (D - dot(A_signed, B_signed)) / 2
-        q_signed = (bundle.astype(np.int8) * 2 - 1)
-        scores = np.dot(self._vocab_matrix, q_signed)
-        distances = (self.dim - scores) // 2
+        # Transfert vers le cache RAM et vidage du buffer
+        for k, v in self.write_buffer.items():
+            self._update_ram_cache(k, v)
+        self.write_buffer.clear()
+
+    def learn_one_pass(self, q_hv_packed: np.ndarray, target_token: str, weight: int = 1):
+        from hdc.representation import encode_token
+        target_hv = encode_token(target_token, self.dim)
         
-        top_k_idx = np.argsort(distances)[:k]
-        return [vocabulary[i] for i in top_k_idx]
+        entry = self.get_entry(q_hv_packed)
+        entry.update(target_hv, weight, target_token)
+        self.save_entry(q_hv_packed, entry)
 
-    def merge(self, other: 'AssociativeMemory'):
-        """Fusionne une autre mémoire associative dans celle-ci."""
-        for key, other_entry in other.storage.items():
-            if key not in self.storage:
-                self.storage[key] = MemoryEntry(self.dim)
-            self.storage[key].merge(other_entry)
+    def predict_topk(self, query_hv_packed: np.ndarray, k: int = 5) -> list[str]:
+        # On cherche d'abord le match exact sur disque/RAM
+        entry = self.get_entry(query_hv_packed)
+        
+        if len(entry.token_weights) > 0:
+            sorted_tokens = sorted(entry.token_weights.items(), key=lambda x: x[1], reverse=True)
+            return [(t[0], 0) for t in sorted_tokens[:k]]
+        
+        # Si pas de match exact, le LSH (Optionnel ici, à ré-implémenter sur la DB si besoin)
+        return []
 
-    def save(self, path: str):
-        save_memory(path, self.storage, self.dim)
-
-    def load(self, path: str):
-        loaded_storage, dim = load_memory(path)
-        if loaded_storage:
-            self.storage = loaded_storage
-            self.dim = dim
-            return True
-        return False
-
-    @property
-    def size(self) -> int:
-        return len(self.storage)
+    def close(self):
+        self.conn.commit()
+        self.conn.close()

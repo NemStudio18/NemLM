@@ -1,75 +1,69 @@
-"""
-HDC-LLM V3 - Moteur de Génération Autorégressif
-Fusionne le contexte sémantique global et le contexte local n-gramme.
-"""
-
 import numpy as np
-from .representation import encode_token, encode_context, DIM
-from .semantic import SemanticIndex
-from .memory import AssociativeMemory
+from hdc.representation import encode_context, DIM
+from hdc.semantic import SemanticIndex
+from hdc.memory import AssociativeMemory
+from hdc.attention import MultiHeadBinaryAttention
 
 class V3Engine:
-    def __init__(self, dim: int = DIM):
+    def __init__(self, dim: int = DIM, db_path: str = "v2/memory.nemdb"):
         self.dim = dim
-        self.memory = AssociativeMemory(dim)
-        self.semantic_index = SemanticIndex(dim=dim)
-        self.long_term_hvs = [] 
+        self.memory = AssociativeMemory(dim=dim, db_path=db_path)
+        self.semantic = SemanticIndex(dim)
+        self.attention = MultiHeadBinaryAttention(dim, n_heads=8, n_keys=1024)
+        
+        # Chargement automatique de l'attention si elle existe sur disque
+        self.attention.load_from_db(self.memory.conn)
+        
+        self.long_term_hvs: list[np.ndarray] = []
 
-    def get_global_context_hv(self) -> np.ndarray:
+    def commit(self):
+        """Sauvegarde tout le moteur (Memoire + Attention)."""
+        self.memory.commit()
+        self.attention.save_to_db(self.memory.conn)
+
+    def get_combined_hv(self, context_tokens: list[str]) -> np.ndarray:
+        l_hv_packed = encode_context(context_tokens, self.dim)
         if not self.long_term_hvs:
-            return np.zeros(self.dim, dtype=np.uint8)
-        sum_hvs = np.sum(self.long_term_hvs, axis=0, dtype=np.int32)
-        return (sum_hvs > len(self.long_term_hvs) // 2).astype(np.uint8)
+            return l_hv_packed
+        c_hv_packed = self.long_term_hvs[-1]
+        return np.bitwise_xor(c_hv_packed, l_hv_packed)
 
-    def predict_next(self, current_tokens: list[str]) -> str:
-        l_hv = encode_context(current_tokens[-5:], self.dim)
-        c_hv = self.get_global_context_hv()
-        q_hv = np.bitwise_xor(c_hv, l_hv)
-        # On passe None pour le vocabulaire si on n'a pas encore build de LSH/Matrix
-        # Mais pour le test on va utiliser un scan exact
-        return self.memory.predict_topk(q_hv, k=1)
+    def train_step(self, sentence: list[str]):
+        if len(sentence) < 2: return
+        sent_hv_packed = self.semantic.encode_bow(sentence)
 
-    def generate(self, prompt: str, max_new_tokens: int = 20, vocab: list[str] = None):
-        words = prompt.lower().split()
-        generated = []
+        for i in range(1, len(sentence)):
+            context = sentence[max(0, i - 5):i]
+            target = sentence[i]
+
+            l_hv_packed = encode_context(context, self.dim)
+            
+            # Apprentissage Attention Binaire (Fallback)
+            target_hv = self.semantic.get_word_hv(target)
+            self.attention.learn(l_hv_packed, target_hv)
+            
+            # Apprentissage Associatif (Exact match)
+            # On stocke le lien local -> target
+            self.memory.learn_one_pass(l_hv_packed, target)
+
+        self.long_term_hvs.append(sent_hv_packed)
+        if len(self.long_term_hvs) > 100:
+            self.long_term_hvs.pop(0)
+
+    def predict_next(self, context_tokens: list[str], top_k: int = 5) -> list[str]:
+        """Orchestre la prediction hybride : Exact Match -> Fallback Attention."""
+        query_hv = encode_context(context_tokens, self.dim)
         
-        prompt_tokens = prompt.lower().split()
-        prompt_hv = self.semantic_index.encode_bow(prompt_tokens)
-        self.long_term_hvs.append(prompt_hv)
+        # 1. Tentative Match Exact
+        exact_preds = self.memory.predict_topk(query_hv, k=top_k)
+        if exact_preds:
+            return [p[0] for p in exact_preds]
+            
+        # 2. Fallback Attention Sémantique (Top-k)
+        # On demande a l'attention de nous sortir un HV consensus
+        attention_hv = self.attention.forward(query_hv, k=8)
         
-        for _ in range(max_new_tokens):
-            # On passe le vocabulaire pour le scan exact dans le test
-            res = self.memory.predict_topk(self.get_combined_hv(words + generated), vocabulary=vocab, k=1)
-            next_token = res[0] if res else None
-            
-            if not next_token or next_token == "<eos>":
-                break
-            generated.append(next_token)
-            
-            if len(generated) % 10 == 0:
-                chunk = generated[-10:]
-                self.long_term_hvs.append(self.semantic_index.encode_bow(chunk))
-                
-        return generated
-
-    def get_combined_hv(self, tokens: list[str]) -> np.ndarray:
-        l_hv = encode_context(tokens[-5:], self.dim)
-        c_hv = self.get_global_context_hv()
-        return np.bitwise_xor(c_hv, l_hv)
-
-    def train_step(self, sentence: str, vocab: list[str] = None):
-        tokens = sentence.lower().split()
-        c_hv = self.semantic_index.encode_bow(tokens)
-        
-        for i in range(1, len(tokens)):
-            context = tokens[:i][-5:]
-            target = tokens[i]
-            
-            l_hv = encode_context(context, self.dim)
-            q_hv = np.bitwise_xor(c_hv, l_hv)
-            
-            # Prédiction actuelle pour PA
-            res = self.memory.predict_topk(q_hv, vocabulary=vocab, k=1)
-            pred = res[0] if res else None
-            
-            self.memory.update_passive_aggressive(q_hv, target, pred)
+        # On demande a l'index semantique les Top-K mots proches de ce consensus
+        # (On modifie find_nearest pour supporter top_k)
+        predicted_tokens = self.semantic.find_nearest_topk(attention_hv, k=top_k)
+        return predicted_tokens

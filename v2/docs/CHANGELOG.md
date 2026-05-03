@@ -1,6 +1,26 @@
 # Changelog - NemLM (LLMonCPU)
 
-## [V3.5.0] - 2026-05-02 (Session Industrielle)
+## [V5.3] - 2026-05-03 (Parallel Turbo Milestone)
+### Ajouté
+- **Moteur Parallèle (V3ParallelEngine)** : Architecture multi-processus avec 3 workers spécialisés par ordre de n-gramme.
+- **Singleton Pruning (Filtrage)** : Élagage à la source des associations uniques pour réduire le bruit sémantique et la taille de la base (-70% sur Europarl).
+- **Performance Boost** : Accélération massive de l'entraînement, passant de 3 phr/s à ~230 phr/s (+7500% de gain).
+- **Multi-Connection SQLite** : Gestion sécurisée des écritures concurrentes en mode WAL.
+
+
+## [V5.2] - 2026-05-03 (HDC-AR Milestone)
+### Ajouté
+- **HDC-AR (Autorégressif)** : Nouvelle architecture fusionnant contexte Local (syntaxe) et Global (thématique).
+- **ContextAccumulator** : Gestion de la cohérence long-terme avec decay exponentiel (0.95).
+- **Multi-scale Backoff** : Recherche pondérée sur n-grammes d'ordres 5, 4, 3, et 2.
+- **Darwinian Attention** : Mécanisme de survie des souvenirs basé sur les "hits" (fréquence d'utilisation).
+- **Popcount Turbo** : Table de lookup pour accélérer la distance de Hamming sur CPU.
+
+### Amélioré
+- **LRU Cache** : Remplacement du cache RAM brutal par un `OrderedDict` intelligent.
+- **Auto-Commit** : Sécurisation des données via un commit SQLite toutes les 60s ou 500 entrées.
+
+## [V5.1] - 2026-05-02 (Industrial Persistent)
 
 ### Ajouté
 - **Moteur Hybride V5** : Intégration de l'Attention Binaire Multi-Têtes (8 têtes) comme mécanisme de repli sémantique.

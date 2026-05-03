@@ -1,56 +1,57 @@
-# Architecture Technique NemLM V5
+# Architecture Technique NemLM V5.3 (Multi-Worker)
 
-## 1. Structure des Dossiers
+## 1. Structure du Système
+NemLM est un moteur de langage 100% binaire basé sur le calcul hyperdimensionnel (HDC). La version 5.3 introduit une architecture **multi-processus** pour l'entraînement à haute performance.
+
 ```text
-LLMonCPU/
-├── SPEC_HDC_V3.md          # Spécification mère (Source de vérité)
-├── CHANGELOG.md             # Historique des versions
-├── ROADMAP.md               # Objectifs futurs (Rust, SIMD)
-└── v2/                      # Code source V5 (Python)
-    ├── scientific_duel_v5_attention.py  # Script de Benchmark principal
-    ├── duel_v5_turbo.log    # Logs de progression en temps réel
-    ├── hdc/                 # Cœur algorithmique
-    │   ├── v3_engine.py     # Orchestrateur (Fusion Mémoire + Attention)
-    │   ├── memory.py        # Gestion SQLite + Cache RAM (int16)
-    │   ├── attention.py     # Multi-Head Binary Attention
-    │   ├── semantic.py      # Index sémantique (Vocabulaire -> HV)
-    │   └── representation.py # Encodage XOR + Rotations circulaires
-    └── D:\nemlm_v5_stable.nemdb  # Base de connaissances SSD (35Go+)
+v2/
+├── hdc/
+│   ├── parallel_engine.py # Moteur Multi-Worker (3 Workers spécialisés)
+│   ├── v3_engine.py      # Orchestrateur HDC-AR (Fusion Local/Global)
+│   ├── memory.py         # Associative Memory (SQLite + Multi-scale Backoff)
+│   ├── attention.py      # Multi-Head Binary Attention (Evolutionary Memory)
+│   ├── semantic.py       # Semantic Index (Mapping Vocabulaire <-> HV)
+│   └── representation.py  # Primitives HDC (XOR, Rotations, Accumulator)
+└── D:\memory.nemdb       # Stockage concurrent (Mode WAL / busy_timeout 10s)
 ```
 
-## 2. Flux de Données (Dataflow)
+## 2. Architecture HDC-AR (Autorégressif)
+NemLM V5.2 introduit le concept de **HDC-AR**, fusionnant la précision syntaxique des n-grammes avec la cohérence thématique des Transformers.
 
-### Phase d'Entraînement
-1. **Input** : Phrase (String) -> **Tokenizer** -> Liste de tokens.
-2. **Semantic Index** : Conversion des tokens en Hypervecteurs (10,000 bits packés).
-3. **Context Encoder** : Fusion des tokens [t-4, t-3, t-2, t-1] via XOR et Rotations.
-4. **Apprentissage Double** :
-   - **Associative Memory** : Mise à jour de la somme pondérée sur disque (SQLite).
-   - **Attention Heads** : Projection du contexte sur les 8 têtes et stockage des cibles en RAM.
+### Les deux piliers du contexte :
+1.  **Contexte Local (Syntaxe)** : Fenêtre glissante de 5 tokens encodée par rotations XOR. Utilisée pour le match exact avec **Backoff multi-échelle** (5, 4, 3, 2-grammes).
+2.  **Contexte Global (Thème)** : Géré par le `ContextAccumulator`. C'est une somme pondérée cumulative avec **decay (0.95)**. Il capture "l'odeur" sémantique de tout ce qui a été dit précédemment.
 
-### Phase d'Inférence (Génération)
-1. **Requête** : "Le chat mange la..."
-2. **Context Encoding** : Génération du HV de contexte actuel.
-3. **Recherche Exacte (Fallback 1)** :
-   - SQL SELECT dans `memory.nemdb`.
-   - Si trouvé : Majority Vote -> Hamming Distance -> Top-K tokens.
-4. **Attention Sémantique (Fallback 2)** :
-   - Si Fallback 1 échoue (score < seuil) :
-    - **SQLite Engine** : Gère à la fois la mémoire associative (Contexts) et les poids de l'Attention (Heads).
-    - **Shared Storage** : Utilise une table unique `storage` avec des préfixes de clés pour séparer les types de données.
-   - Projection du contexte sur les 8 têtes.
-   - Consensus des têtes sur les candidats sémantiquement proches.
-5. **Output** : "souris" (Consensus Global).
+### Flux d'Inférence (Dataflow) :
+1.  **Requête** -> Tokenization.
+2.  **Backoff Search** : Interrogation SQLite sur les ordres 5, 4, 3 et 2 (Local uniquement).
+3.  **Thematic Fallback** : Si aucun match exact n'est trouvé :
+    - Fusion `Query = Local XOR Global`.
+    - Projection sur 8 têtes d'attention binaire.
+    - Consensus par vote majoritaire sur les candidats sémantiques.
+4.  **Accumulation** : Le token choisi est injecté dans l'accumulateur global pour influencer le futur.
 
 ## 3. Détail des Calculs (Ingénierie)
 
-| Opération | Formule / Algorithme | Type |
-| :--- | :--- | :--- |
-| **Binding** | `C = A XOR rotate(B)` | Bitwise |
-| **Similarity** | `Hamming(A, B) = popcount(A XOR B)` | Bitwise |
-| **Majority Vote** | `bit_j = 1 if sum(votes_j) > 0 else 0` | Integer |
-| **Attention Key** | `key = context_hv XOR projection_matrix` | Bitwise |
-| **LSH** | `bucket = sign(HVs . Hyperplanes)` | Bitwise |
+| Opération | Formule / Algorithme | Type | Implémentation |
+| :--- | :--- | :--- | :--- |
+| **Binding (Local)** | `C = A XOR rotate(B)` | Bitwise | XOR + `np.roll` |
+| **Accumulation (Global)** | `G_n = (G_{n-1} * 0.95) + current` | Integer | `np.int16` sum |
+| **Similarity** | `Hamming(A, B) = popcount(A XOR B)` | Bitwise | `POPCOUNT_TABLE` (Lookup) |
+| **Backoff weight** | `Score = count * order^3` | Weighted | Exponential decay |
+| **Evolutionary Mem** | `Replacement = min(hits)` | Darwinian | Hit counter per slot |
+| **Pruning (V5.3)** | `Filter = count >= 2` | Threshold | RAM-based Hash set |
+
+## 5. Filtrage des Singletons (Élagage)
+Pour maximiser la densité sémantique et réduire la taille de la base SQLite, la V5.3 implémente un filtre à seuil :
+- **Hash Tracking** : Chaque worker maintient un set de hashs en RAM (`seen_once`).
+- **Insertion Différée** : Un hypervecteur n'est engagé dans SQLite que lors de sa **deuxième occurrence**.
+- **Impact** : Réduction drastique du bruit statistique et accélération de l'I/O disque.
+
+## 4. Performance & Stockage
+- **Moteur SQLite** : Optimisé avec `PRAGMA journal_mode = WAL` et `mmap_size = 2Go`.
+- **Cache RAM** : Vrai cache LRU via `OrderedDict` pour les entrées de mémoire associative.
+- **Latency Target** : < 10ms par token sur CPU i3 (100% bitwise).
 
 ---
-*Document conçu pour transmission à un ingénieur système/IA.*
+*Dernière mise à jour : Mai 2026 - Milestone HDC-AR Phase 1 Complete.*

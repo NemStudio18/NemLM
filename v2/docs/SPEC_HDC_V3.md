@@ -1,41 +1,46 @@
-# Spécification NemLM HDC V3.5 - Industrial Edition
+# Spécification Technique HDC V3 (Autorégressif)
 
-Cette version "Industrielle" fait passer le POC à un moteur de production capable de gérer des dizaines de gigaoctets de connaissances sur disque tout en conservant une inférence ultra-rapide sur CPU.
+## 1. Représentation des Données
+- **Dimension (D)** : 10,000 bits (par défaut).
+- **Format** : Vecteurs binaires packés (uint8).
+- **Bit-packing** : Chaque octet contient 8 dimensions.
 
-## 1. Représentation Binaire Compacte
-Un Hypervecteur (HV) de dimension $D=10,000$ est stocké sous forme de $D/8$ octets (1250 octets).
-- **Format** : `np.packbits` (MSB first).
-- **Opérations** : Les calculs de distance sémantique s'effectuent via XOR binaire suivi d'un comptage de bits (Hamming).
+## 2. Encodage du Contexte (HDC-AR)
 
-## 2. Architecture Hybride V5
-NemLM V3.5 utilise deux couches de mémoire complémentaires :
-### 2.1 Mémoire Associative (Exact Match)
-- **Stockage** : SQLite sur SSD (`D:\`).
-- **Structure** : `int16[D]`. L'utilisation d'entiers 16 bits permet d'accumuler des milliers d'exemples par contexte sans saturation (contrairement à l'int8).
-- **Récupération** : Majority Vote dynamique sur les sommes pondérées.
+### 2.1 Contexte Local (N-grammes)
+Le contexte local est généré par la combinaison XOR de tokens décalés par rotation circulaire :
+`L_hv = T_n XOR rotate(T_{n-1}, 1) XOR rotate(T_{n-2}, 2) ...`
 
-### 2.2 Attention Binaire Multi-Têtes (V5)
-- **Architecture** : 8 têtes de 1024 clés de 10 000 bits.
-- **Persistance** : Stockage des matrices de clés et de valeurs dans la table `storage` de SQLite (`attn_head_0` à `attn_head_7`).
-- **Inférence** : Consensus par vote majoritaire sur les Top-K résultats des 8 têtes.
-- **Accuracy** : Évaluée en Top-5 (5 candidats sémantiques les plus proches via Hamming).
+### 2.2 Contexte Global (Accumulateur)
+L'accumulateur maintient un état sémantique persistant sur la séquence :
+`G_sum = (G_sum * 95) // 100 + T_n_bits`
+`G_hv = (G_sum > 0)`
 
-## 3. Persistance & Scalabilité
-- **Moteur** : SQLite 3 avec mode WAL (Write-Ahead Logging).
-- **Optimisations** : 
-  - `mmap_size = 2 Go` : Mapping mémoire pour accès SSD instantanés.
-  - `cache_size = 2 Go` : Cache de pages pour les contextes fréquents.
-  - **Pruning** : Élagage automatique des objets RAM vers le disque.
+### 2.3 Fusion Sémantique
+Pour l'attention, on fusionne les deux signaux :
+`Query_hv = L_hv XOR G_hv`
 
-## 4. Algorithmique Bit-à-Bit (Inférence)
-- **Vitesse** : < 1ms par token sur CPU standard.
-- **Zéro Flottant** : Aucune opération de multiplication matricielle ou de virgule flottante durant la génération.
-- **Fusion sémantique** : XOR entre le contexte local (N-grammes) et la mémoire à long terme.
+## 3. Mécanisme de Backoff (Associative Memory)
+La prédiction par match exact utilise un système de vote pondéré dégressif sur les ordres de n-grammes :
 
-## 5. Spécificités Linguistiques
-- **Tokenisation** : Regex optimisée pour le français (Europarl).
-- **Contexte** : Fenêtre glissante de 5 tokens (Trigrammes/Pentagrammes).
-- **Encodage** : Permutations circulaires pour préserver l'ordre des mots dans l'hypervecteur de contexte.
+| Ordre (n) | Poids (n^3) | Description |
+| :--- | :--- | :--- |
+| 5 | 125 | Contexte quasi-certain |
+| 4 | 64 | Contexte fort |
+| 3 | 27 | Contexte syntaxique |
+| 2 | 8 | Contexte grammatical minimal |
+
+**Formule de score** : `Score(token) = sum(Count_n * n^3)`
+
+## 4. Attention Darwinienne (Evolutionary)
+Les têtes d'attention gèrent leur mémoire de manière adaptative :
+- Chaque souvenir (`context -> target`) possède un compteur de `hits`.
+- En cas de saturation, le souvenir avec `min(hits)` est écrasé.
+- Une interrogation réussie (`top_k`) incrémente le compteur de hits des souvenirs concernés.
+
+## 5. Optimisations Matérielles (CPU)
+- **Hamming** : Utilisation obligatoire d'une table de pré-calcul (Lookup Table) pour le `popcount` des octets.
+- **Persistence** : Stockage SQLite en mode WAL avec indexation B-Tree sur les clés binaires.
 
 ---
-*État du projet : Industrialisé sur CPU (Python/NumPy). Prochaine étape : Portage Rust.*
+*Cette spécification fait autorité pour toutes les implémentations de la famille NemLM V5.x.*

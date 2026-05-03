@@ -1,44 +1,37 @@
-# 🧠 NemLM (HDC-LLM)
+# NemLM : LLM Frugal & 100% Bitwise (V5.3 Multi-Worker)
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![CPU: Legacy Native](https://img.shields.io/badge/CPU-Legacy%20Native-orange.svg)](#)
-[![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-green.svg)](#)
+NemLM est une architecture expérimentale de modèle de langage (LLM) conçue pour s'affranchir totalement des GPU et des calculs flottants. Basé sur le **Calcul Hyperdimensionnel (HDC)**, NemLM utilise des opérations binaires (XOR, Popcount, Rotations) pour simuler des capacités de raisonnement et de génération de texte.
 
-**NemLM** est un moteur de langage expérimental basé sur le **Hyperdimensional Computing (HDC)**. Conçu spécifiquement pour les architectures CPU legacy (comme l'Intel i3-3220), NemLM remplace l'attention flottante traditionnelle par des opérations binaires massives (`XOR`, `Popcount`, `Rotations`).
+## 🚀 Vision & Objectifs
+- **Performance GPT-2 Small** : Atteindre la qualité d'un modèle de 117M paramètres sur un CPU legacy.
+- **Frugalité Extrême** : Fonctionne avec **4-6 Go de RAM** et sur n'importe quel processeur (x64/ARM).
+- **Zéro Flottant** : L'inférence est 100% binaire (Bitwise).
+- **Vitesse** : Cible d'inférence de **< 1ms/token**.
 
-## 🚀 Vision
-L'objectif de NemLM est de prouver qu'un modèle de langage capable de généralisation sémantique peut fonctionner sans GPU, en utilisant uniquement les capacités bitwise du processeur.
+## 🧠 Architecture HDC-AR (V5.3)
+La version actuelle utilise une architecture **Autorégressive Hyperdimensionnelle (HDC-AR)** parallélisée :
+- **Multi-Worker Training** : Entraînement asynchrone sur 3 cœurs CPU (3 specialized workers).
+- **Singleton Pruning** : Filtrage des associations uniques pour maximiser la densité sémantique.
+- **Multi-scale Backoff** : Prédiction précise via n-grammes d'ordres 5, 4, 3, et 2.
+- **Thematic Accumulator** : Un accumulateur global pour la cohérence sémantique long-terme.
 
-### Points Forts :
-- **Indépendance GPU** : Zéro calcul flottant (FP32/FP16) lors de l'inférence sémantique.
-- **Vitesse Bitwise** : Utilisation intensive du produit scalaire binaire et des distances de Hamming.
-- **Hybridation SSD/RAM** : Stockage SQLite haute performance (35 Go+) couplé à une Attention Binaire Multi-Têtes.
-- **Persistance Totale** : Inférence immédiate grâce au stockage disque des poids de l'Attention (V5.1).
-- **Top-5 Accuracy Duel** : Benchmark scientifique intégré face aux modèles Kneser-Ney.
-- **Architecture HDC Pure** : Opérations binaires (XOR, Hamming) pour une empreinte CPU minimale.
+## 🛠️ Stack Technique
+- **Core** : Python 3.10+ (Optimisé Numpy / SQLite).
+- **Persistence** : SQLite (Mode WAL + mmap) pour gérer des bases de données de plus de 100 Go sur SSD.
+- **Primitives** : XOR, Bit-Packing, Popcount Table Lookup.
 
-## 🛠️ Architecture V3
-Le moteur NemLM V3 repose sur une fusion autorégressive :
-1. **Semantic Layer** : Encodage de phrases par bundling HDC.
-2. **Contextual Layer** : Encodage de séquences par rotations circulaires.
-3. **Associative Memory** : Retrieval ultra-rapide via produit matriciel optimisé.
+## 📊 Résultats du Duel (V5.3 Milestone)
+- **Accuracy (Top-5)** : **31.36%** (NemLM) vs **32.80%** (Kneser-Ney).
+- **Vitesse Entraînement** : **230+ phr/s** (Parallel Multi-Worker).
+- **Taille Base de Données** : **~450 Mo** (filtrée) vs ~1.8 Go (non-filtrée).
 
-## 📈 Statistiques de Performance (Python Baseline)
-*Benchmarks en cours de calcul sur Intel i3-3220 (2 Cores / 4 Threads)*
-- **Débit Entraînement** : En cours d'évaluation...
-- **Latence Inférence** : En cours d'évaluation...
-- **Capacité** : Test massif de 300 000 tokens en cours.
-
-## 💻 Utilisation
-```bash
-# Entraîner le modèle avec des paramètres personnalisés
-python src/train.py --phrases 1000 --workers 2
-```
-
-## 🏗️ Structure du Projet
-- `src/` : Moteur NemLM V3 (Cerveau, Mémoire, Représentation).
-- `legacy/` : Prototypes V1 et V2 (Recherche sémantique).
-- `data/` : Corpus de test (Text8).
+### 🛠️ Conditions du Duel
+Pour garantir une validité scientifique, le test a été réalisé dans les conditions suivantes :
+- **Corpus** : Europarl FR (Débats du Parlement Européen).
+- **Dataset** : 15 000 phrases pour l'entraînement, 5 000 phrases pour le test.
+- **Hardware** : Intel i3-3220 @ 3.30GHz (Architecture de 2012).
+- **RAM** : Consommation stable à **~1.2 Go** (incluant le cache SQLite).
+- **Contrainte** : NemLM utilise des vecteurs de **10 000 bits** et des opérations 100% binaires. Kneser-Ney utilise des calculs flottants de probabilités classiques (interpolation).
 
 ---
-*Développé sous licence AGPL v3 pour la communauté du calcul frugal.*
+*Projet conçu et développé par NemStudio dans le cadre de l'Advanced Agentic Coding.*
